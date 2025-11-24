@@ -1,12 +1,17 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+import { errorHandler } from './middleware/errorHandler.js';
+
+// Import routes
 import authRoutes from './routes/authRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import reservationRoutes from './routes/reservationRoutes.js';
-import { errorHandler, notFound } from './middleware/errorHandler.js';
-import pool from './config/database.js';
-
+import inspectionRoutes from './routes/inspectionRoutes.js';
+import requestRoutes from './routes/requestRoutes.js';
+import contractRoutes from './routes/contractRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import notificationRoutes from './routes/notificationRoutes.js';
 
 // Load environment variables
 dotenv.config();
@@ -19,21 +24,19 @@ app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
-app.use((req, res, next) => {
-  console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
-  next();
-});
+// Test database connection
 
-// Health check route
+// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'MyDormy API is running!',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV || 'development'
   });
 });
 
@@ -41,45 +44,36 @@ app.get('/health', (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/inspections', inspectionRoutes);
+app.use('/api/requests', requestRoutes);
+app.use('/api/contracts', contractRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
 
-// Error handling
-app.use(notFound);
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: 'Endpoint not found'
+  });
+});
+
+// Error handler (must be last)
 app.use(errorHandler);
 
 // Start server
-const startServer = async () => {
-  try {
-    // Test database connection
-    await pool.query('SELECT NOW()');
-    console.log('✅ Database connected successfully');
-
-    app.listen(PORT, () => {
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-      console.log(`🚀 MyDormy Server running on port ${PORT}`);
-      console.log(`📍 API: http://localhost:${PORT}`);
-      console.log(`🏥 Health: http://localhost:${PORT}/health`);
-      console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    });
-  } catch (error) {
-    console.error('❌ Failed to start server:', error);
-    process.exit(1);
-  }
-};
-
-startServer();
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  await pool.end();
-  process.exit(0);
+app.listen(PORT, () => {
+  console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+  console.log(`🚀 MyDormy Server running on port ${PORT}`);
+  console.log(`📍 API: http://localhost:${PORT}`);
+  console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
 
-process.on('SIGINT', async () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  await pool.end();
-  process.exit(0);
+// Handle unhandled promise rejections
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Promise Rejection:', err);
 });
 
 export default app;

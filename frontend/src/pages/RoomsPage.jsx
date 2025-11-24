@@ -15,7 +15,11 @@ import {
   MenuItem,
   CircularProgress,
   Snackbar,
-  Alert
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -35,6 +39,13 @@ function RoomsPage() {
     open: false,
     message: '',
     severity: 'success'
+  });
+  const [reservationDialog, setReservationDialog] = useState({
+    open: false,
+    roomId: null,
+    roomNumber: '',
+    startDate: '',
+    endDate: ''
   });
   
   const { user, logout } = useAuth();
@@ -74,7 +85,7 @@ function RoomsPage() {
     }
   };
 
-  const handleReserveRoom = async (roomId) => {
+  const handleOpenReservationDialog = (room) => {
     if (!user) {
       setSnackbar({
         open: true,
@@ -85,20 +96,54 @@ function RoomsPage() {
       return;
     }
 
+    // Set default dates (current academic year)
+    const today = new Date();
+    const startDate = new Date(today.getFullYear(), 8, 1); // September 1st
+    const endDate = new Date(today.getFullYear() + 1, 5, 30); // June 30th next year
+
+    setReservationDialog({
+      open: true,
+      roomId: room.id,
+      roomNumber: room.room_number,
+      startDate: startDate.toISOString().split('T')[0],
+      endDate: endDate.toISOString().split('T')[0]
+    });
+  };
+
+  const handleCloseReservationDialog = () => {
+    setReservationDialog({
+      open: false,
+      roomId: null,
+      roomNumber: '',
+      startDate: '',
+      endDate: ''
+    });
+  };
+
+  const handleConfirmReservation = async () => {
     try {
+      await axios.post('/api/reservations', {
+        room_id: reservationDialog.roomId,
+        start_date: reservationDialog.startDate,
+        end_date: reservationDialog.endDate
+      });
+
       setSnackbar({
         open: true,
-        message: `Kambarys #${roomId} sėkmingai rezervuotas! (Demo versija)`,
+        message: `Kambarys ${reservationDialog.roomNumber} sėkmingai rezervuotas!`,
         severity: 'success'
       });
 
+      handleCloseReservationDialog();
+      
+      // Refresh rooms list
       setTimeout(() => {
         fetchRooms();
       }, 1000);
     } catch (error) {
       setSnackbar({
         open: true,
-        message: 'Klaida rezervuojant kambarį',
+        message: error.response?.data?.message || 'Klaida rezervuojant kambarį',
         severity: 'error'
       });
     }
@@ -283,7 +328,7 @@ function RoomsPage() {
                         fullWidth 
                         sx={{ mt: 2 }}
                         disabled={room.status !== 'AVAILABLE'}
-                        onClick={() => handleReserveRoom(room.id)}
+                        onClick={() => handleOpenReservationDialog(room)}
                       >
                         {room.status === 'AVAILABLE' ? 'Rezervuoti' : 'Nepasiekiamas'}
                       </Button>
@@ -295,6 +340,42 @@ function RoomsPage() {
           </Grid>
         )}
       </Container>
+
+      {/* Rezervacijos dialogas */}
+      <Dialog open={reservationDialog.open} onClose={handleCloseReservationDialog} maxWidth="sm" fullWidth>
+        <DialogTitle>Rezervuoti kambarį {reservationDialog.roomNumber}</DialogTitle>
+        <DialogContent>
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              label="Pradžios data"
+              type="date"
+              value={reservationDialog.startDate}
+              onChange={(e) => setReservationDialog({ ...reservationDialog, startDate: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+              sx={{ mb: 2 }}
+            />
+            <TextField
+              fullWidth
+              label="Pabaigos data"
+              type="date"
+              value={reservationDialog.endDate}
+              onChange={(e) => setReservationDialog({ ...reservationDialog, endDate: e.target.value })}
+              InputLabelProps={{ shrink: true }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleCloseReservationDialog}>Atšaukti</Button>
+          <Button 
+            onClick={handleConfirmReservation} 
+            variant="contained"
+            disabled={!reservationDialog.startDate || !reservationDialog.endDate}
+          >
+            Patvirtinti rezervaciją
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar pranešimams */}
       <Snackbar
