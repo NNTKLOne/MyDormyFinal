@@ -57,7 +57,7 @@ export const createUser = async (req, res) => {
         const tempPassword = Math.random().toString(36).slice(-10);
         const passwordHash = await bcrypt.hash(tempPassword, 10);
 
-        const mustChange = user_type === 'STUDENT';
+        const mustChange = true;
 
         // 5. Įrašome vartotoją
         const userRes = await query(
