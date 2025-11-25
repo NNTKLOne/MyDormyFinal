@@ -51,6 +51,7 @@ npm install
 npm run dev
 ```
 
+## Funkcionalumas
 
 ### Sprint 1: Pagrindinis funkcionalumas
 - Prisijungimas ir autentifikacija
