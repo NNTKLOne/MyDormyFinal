@@ -1,19 +1,15 @@
-# MyDormy - Studentų Bendrabučio Kambarių Rezervacijos Sistema
+# MyDormy
 
-## 📋 Projekto aprašymas
-MyDormy yra centralizuota sistema, skirta VGTU bendrabučių kambarių rezervacijai ir valdymui. Sistema automatizuoja visą apgyvendinimo procesą - nuo kambario paieškos iki sutarties pasirašymo.
+Šioje repozitorijoje saugomas **MyDormy** sistemos programinis kodas.
 
-## 🏗️ Projekto struktūra
-```
-MyDormy/
-├── backend/          # Node.js + Express.js serveris
-├── frontend/         # React aplikacija
-├── database/         # PostgreSQL schemos ir migracijos
-├── docs/            # Dokumentacija
-└── README.md
-```
+**MyDormy** - tai išmanioji studentų bendrabučių kambarių rezervavimo ir valdymo sistema, skirta palengvinti ir automatizuoti apgyvendinimo procesą universitetuose.  
+Sistema centralizuoja studentų prašymus, kambarių rezervacijas, apžiūrų planavimą, sutarčių pasirašymą ir palengvina komunikaciją tarp administracijos, budėtojų, studentų bei esamų gyventojų.
 
-## 🛠️ Technologijos
+**Komanda** - Augustas Česnavičius, Dominik Lavcel, Vilius Ničiperovičius.
+
+
+
+## Technologijos
 
 ### Backend:
 - Node.js 18+
@@ -23,17 +19,17 @@ MyDormy/
 - Bcrypt slaptažodžių šifravimui
 
 ### Frontend:
-- React 18+
+- React
 - Material-UI
 - React Router
 - Axios
 - Context API būsenų valdymui
 
-## 📦 Diegimas
+## Diegimas
 
 ### 1. Klonuok repozitoriją
 ```bash
-git clone https://github.com/NNTKLOne/MyDormy.git
+git clone https://github.com/NNTKLOne/MyDormyFinal.git
 cd MyDormy
 ```
 
@@ -44,6 +40,7 @@ npm install
 cp .env.example .env
 # Redaguok .env failą su savo duomenų bazės nustatymais
 npm run migrate
+npm run seed
 npm run dev
 ```
 
@@ -51,34 +48,29 @@ npm run dev
 ```bash
 cd frontend
 npm install
-npm start
+npm run dev
 ```
 
-## 🚀 Sparinti išvystymas
+## Sparinti išvystymas
 
 ### Sprint 1: Pagrindinis funkcionalumas
-- ✅ Prisijungimas ir autentifikacija
-- ✅ Kambarių paieška su filtrais
-- ✅ Kambario rezervacija
-- ✅ Apžiūros laiko rezervavimas
+- Prisijungimas ir autentifikacija
+- Paskyros sukūrimas
+- Kambarių paieška su filtrais
+- Kambario rezervacija
+- Apžiūros laiko rezervavimas
+- Apžiūros laiko tvirtinimas
 
 ### Sprint 2: Administravimas
-- 🔄 Apgyvendinimo prašymų valdymas
-- 🔄 Sutarčių pasirašymas
-- 🔄 Prašymų tvirtinimas
+- Sutarčių valdymas
+- Sutarčių pasirašymas
+- Sutarčių peržiūra ir tvirtinimas
 
-### Sprint 3: Papildomas funkcionalumas
-- ⏳ Kambarių valdymas
-- ⏳ Pranešimų sistema
-- ⏳ Gyventojų būsenų valdymas
+### Sprint 3: 
+- Kambarių informacijos valdymas
+- Buvimo kambaryje būsenos valdymas
 
-## 👥 Komanda
+## Komanda
 - Vilius Ničiperovičius
 - Augustas Česnavičius
 - Dominik Lavcel
-
-## 📝 Licencija
-VGTU Kompleksinis projektas 2025
-
-## 📞 Kontaktai
-Projekto repozitorija: https://github.com/NNTKLOne/MyDormy
