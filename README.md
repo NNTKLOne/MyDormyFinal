@@ -51,7 +51,6 @@ npm install
 npm run dev
 ```
 
-## Sparinti išvystymas
 
 ### Sprint 1: Pagrindinis funkcionalumas
 - Prisijungimas ir autentifikacija
@@ -69,8 +68,3 @@ npm run dev
 ### Sprint 3: 
 - Kambarių informacijos valdymas
 - Buvimo kambaryje būsenos valdymas
-
-## Komanda
-- Vilius Ničiperovičius
-- Augustas Česnavičius
-- Dominik Lavcel
