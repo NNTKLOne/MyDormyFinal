@@ -29,7 +29,9 @@ function RoomsPage() {
     dormitory_id: '',
     min_price: '',
     max_price: '',
-    capacity: ''
+    room_type: '',
+    floor: '',
+    min_free_beds: ''
   });
   const [bookingDialog, setBookingDialog] = useState({
     open: false,
@@ -173,7 +175,7 @@ function RoomsPage() {
     const getStatusText = (room) => {
       const { reserved, totalFree } = getRoomCounts(room);
       
-      // Studentui rodomi tik kambariai su totalFree > 0
+      // studentui rodomi tik kambariai su totalFree > 0
       // todėl visuomet tik rodome rezervacijas
       return `Rezervuota ${reserved}/${totalFree}`;
     };
@@ -193,12 +195,14 @@ function RoomsPage() {
       {/* Filtrai */}
       <Box sx={{ mb: 3 }}>
         <Grid container spacing={2}>
+          {/* Bendrabutis */}
           <Grid item xs={12} md={3}>
             <TextField
               select
               fullWidth
               label="Bendrabutis"
               value={filters.dormitory_id}
+              sx={{ minWidth: 200 }}
               onChange={(e) => setFilters({ ...filters, dormitory_id: e.target.value })}
             >
               <MenuItem value="">Visi bendrabučiai</MenuItem>
@@ -210,6 +214,7 @@ function RoomsPage() {
             </TextField>
           </Grid>
 
+          {/* Kaina min */}
           <Grid item xs={6} md={2}>
             <TextField
               fullWidth
@@ -220,6 +225,7 @@ function RoomsPage() {
             />
           </Grid>
 
+          {/* Kaina max */}
           <Grid item xs={6} md={2}>
             <TextField
               fullWidth
@@ -230,26 +236,75 @@ function RoomsPage() {
             />
           </Grid>
 
-          <Grid item xs={6} md={2}>
+          {/* Kambario tipas */}
+          <Grid item xs={12} md={3}>
             <TextField
+              select
               fullWidth
-              label="Min vietų sk."
-              type="number"
-              value={filters.capacity}
-              onChange={(e) => setFilters({ ...filters, capacity: e.target.value })}
-            />
+              label="Kambario tipas"
+              value={filters.room_type}
+              sx={{ minWidth: 200 }}
+              onChange={(e) => setFilters({ ...filters, room_type: e.target.value })}
+            >
+              <MenuItem value="">Visi tipai</MenuItem>
+              <MenuItem value="Vienvietis">Vienvietis</MenuItem>
+              <MenuItem value="Dvivietis">Dvivietis</MenuItem>
+              <MenuItem value="Trivietis">Trivietis</MenuItem>
+            </TextField>
           </Grid>
 
-          <Grid item xs={6} md={3} sx={{ display: 'flex', alignItems: 'stretch' }}>
+          {/* Aukštas */}
+          <Grid item xs={6} md={2}>
+            <TextField
+              select
+              fullWidth
+              label="Aukštas"
+              value={filters.floor}
+              sx={{ minWidth: 200 }}
+              onChange={(e) => setFilters({ ...filters, floor: e.target.value })}
+            >
+              <MenuItem value="">Visi aukštai</MenuItem>
+              {Array.from({ length: 15 }, (_, i) => i + 1).map((f) => (
+                <MenuItem key={f} value={f}>
+                  {f}
+                </MenuItem>
+              ))}
+            </TextField>
+          </Grid>
+
+          {/* Min laisvų vietų skaičius */}
+          <Grid item xs={6} md={2}>
+            <TextField
+              select
+              fullWidth
+              label="Min laisvų vietų"
+              value={filters.min_free_beds}
+              sx={{ minWidth: 200 }}
+              onChange={(e) => setFilters({ ...filters, min_free_beds: e.target.value })}
+            >
+              <MenuItem value="">Nesvarbu</MenuItem>
+              <MenuItem value="1">1</MenuItem>
+              <MenuItem value="2">2</MenuItem>
+              <MenuItem value="3">3</MenuItem>
+              <MenuItem value="4">4</MenuItem>
+            </TextField>
+          </Grid>
+
+          {/* Išvalyti filtrus */}
+          <Grid item xs={12} md={2} sx={{ display: 'flex', alignItems: 'stretch' }}>
             <Button
               fullWidth
               variant="outlined"
-              onClick={() => setFilters({
-                dormitory_id: '',
-                min_price: '',
-                max_price: '',
-                capacity: ''
-              })}
+              onClick={() =>
+                setFilters({
+                  dormitory_id: '',
+                  min_price: '',
+                  max_price: '',
+                  room_type: '',
+                  floor: '',
+                  min_free_beds: ''
+                })
+              }
               sx={{ height: '56px' }}
             >
               Išvalyti filtrus
@@ -294,11 +349,12 @@ function RoomsPage() {
                     </CardMedia>
                     
                     <CardContent sx={{ flexGrow: 1 }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                         <Typography variant="h6">
                           Kambarys {room.room_number}
                         </Typography>
                         <Chip 
+                        sx={{ ml: 2 }}
                           label={getStatusText(room)} 
                           color={getStatusColor(room)} 
                           size="small" 

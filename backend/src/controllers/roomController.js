@@ -67,8 +67,9 @@ export const recalculateRoomStatus = async (roomId) => {
 // @access  Public
 export const getRooms = async (req, res) => {
   try {
-    const { dormitory_id, min_price, max_price, capacity, room_type, status } = req.query;
+    const { dormitory_id, min_price, max_price, capacity, min_free_beds, room_type, status, floor } = req.query;
 
+    const freeBedsFilter = min_free_beds || capacity || null;
     const normalizedStatus = status ? status.toUpperCase() : null;
 
     let queryText = `
@@ -86,15 +87,21 @@ export const getRooms = async (req, res) => {
         r.images,
         d.name AS dormitory_name,
         d.address AS dormitory_address,
-        COALESCE(r.occupied_beds, 0) AS occupied_beds,
+        COALESCE(ct.current_residents, 0) AS occupied_beds,
         COALESCE(ins.reserved_slots, 0) AS reserved_slots,
-        GREATEST(r.capacity - COALESCE(r.occupied_beds, 0), 0) AS total_free_beds,
+        GREATEST(r.capacity - COALESCE(ct.current_residents, 0), 0) AS total_free_beds,
         GREATEST(
-          (r.capacity - COALESCE(r.occupied_beds, 0)) - COALESCE(ins.reserved_slots, 0),
+          (r.capacity - COALESCE(ct.current_residents, 0)) - COALESCE(ins.reserved_slots, 0),
           0
         ) AS available_beds
       FROM rooms r
       JOIN dormitories d ON r.dormitory_id = d.id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS current_residents
+        FROM contracts c
+        WHERE c.room_id = r.id
+          AND c.status = 'ACTIVE'
+      ) ct ON TRUE
       LEFT JOIN LATERAL (
         SELECT COUNT(*) AS reserved_slots
         FROM inspections i
@@ -111,10 +118,7 @@ export const getRooms = async (req, res) => {
     if (!normalizedStatus) {
       queryText += `
         AND GREATEST(
-              (r.capacity - COALESCE(r.occupied_beds, 0)) - COALESCE(ins.reserved_slots, 0),
-              0
-            ) > 0
-      `;
+              (r.capacity - COALESCE(r.occupied_beds, 0)) - COALESCE(ins.reserved_slots, 0), 0) > 0`;
     }
 
     if (dormitory_id) {
@@ -135,15 +139,27 @@ export const getRooms = async (req, res) => {
       paramCount++;
     }
 
-    if (capacity) {
-      queryText += ` AND r.capacity >= $${paramCount}`;
-      params.push(capacity);
+    // MIN. LAISVŲ VIETŲ SKAIČIUS (pagal available_beds)
+    if (freeBedsFilter) {
+      queryText += `
+        AND GREATEST(
+              (r.capacity - COALESCE(ct.current_residents, 0)) - COALESCE(ins.reserved_slots, 0),
+              0
+            ) >= $${paramCount}
+      `;
+      params.push(freeBedsFilter);
       paramCount++;
     }
 
     if (room_type) {
       queryText += ` AND r.room_type = $${paramCount}`;
       params.push(room_type);
+      paramCount++;
+    }
+
+    if (floor) {
+      queryText += ` AND r.floor = $${paramCount}`;
+      params.push(floor);
       paramCount++;
     }
 
@@ -154,7 +170,7 @@ export const getRooms = async (req, res) => {
       paramCount++;
     }
 
-    queryText += ' ORDER BY d.name, r.room_number';
+    queryText += ' ORDER BY d.name, r.floor, r.room_number';
 
     const result = await query(queryText, params);
 
