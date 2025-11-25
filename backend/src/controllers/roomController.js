@@ -67,9 +67,8 @@ export const recalculateRoomStatus = async (roomId) => {
 // @access  Public
 export const getRooms = async (req, res) => {
   try {
-    const { dormitory_id, min_price, max_price, capacity, min_free_beds, room_type, status, floor } = req.query;
-
-    const freeBedsFilter = min_free_beds || capacity || null;
+    const { dormitory_id, min_price, max_price, min_free_beds, room_type, status, floor } = req.query;
+``
     const normalizedStatus = status ? status.toUpperCase() : null;
 
     let queryText = `
@@ -140,14 +139,10 @@ export const getRooms = async (req, res) => {
     }
 
     // MIN. LAISVŲ VIETŲ SKAIČIUS (pagal available_beds)
-    if (freeBedsFilter) {
+    if (min_free_beds) {
       queryText += `
-        AND GREATEST(
-              (r.capacity - COALESCE(ct.current_residents, 0)) - COALESCE(ins.reserved_slots, 0),
-              0
-            ) >= $${paramCount}
-      `;
-      params.push(freeBedsFilter);
+        AND GREATEST((r.capacity - COALESCE(ct.current_residents, 0)) - COALESCE(ins.reserved_slots, 0),) >= $${paramCount}`;
+      params.push(min_free_beds);
       paramCount++;
     }
 

@@ -76,7 +76,7 @@ function Sidebar() {
     // For now, show for all who might be residents
     if (user.user_type === 'STUDENT') {
       items.push(
-        { text: 'Mano kambarys', icon: <CalendarIcon />, path: '/resident' }
+        { text: 'Apsilankymai pas mane', icon: <CalendarIcon />, path: '/resident' }
       );
     }
 

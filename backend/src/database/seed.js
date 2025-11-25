@@ -18,7 +18,8 @@ const seedDatabase = async () => {
         ('+37060054321', 'dorm1@vgtu.lt', 'Saulėtekio al. 39, Vilnius'),
         ('+37060098765', 'student1@vgtu.lt', 'Vilnius, Lithuania'),
         ('+37060011111', 'student2@vgtu.lt', 'Kaunas, Lithuania'),
-        ('+37060022222', 'supervisor@vgtu.lt', 'Vilnius, Lithuania')
+        ('+37060022222', 'supervisor@vgtu.lt', 'Vilnius, Lithuania'),
+        ('+37060033333', 'student3@vgtu.lt', 'Vilnius, Lithuania')
       RETURNING id;
     `);
 
@@ -32,9 +33,10 @@ const seedDatabase = async () => {
         ('Petras', 'Bendrabutis', 'dorm1@vgtu.lt', $1, 'DORMITORY_ADMIN', $3, NULL, NULL, NULL),
         ('Vilius', 'Ničiperovičius', 'student1@vgtu.lt', $1, 'STUDENT', $4, 'Fundamentinių mokslų', 'Informacinės sistemos', 'S22001'),
         ('Augustas', 'Česnavičius', 'student2@vgtu.lt', $1, 'STUDENT', $5, 'Fundamentinių mokslų', 'Informacinės sistemos', 'S22002'),
-        ('Martynas', 'Budintis', 'supervisor@vgtu.lt', $1, 'SUPERVISOR', $6, NULL, NULL, NULL)
+        ('Martynas', 'Budintis', 'supervisor@vgtu.lt', $1, 'SUPERVISOR', $6, NULL, NULL, NULL),
+        ('Tomas', 'Testas', 'student3@vgtu.lt', $1, 'STUDENT', $7, 'Fundamentinių mokslų', 'Informacinės sistemos', 'S22003')
       RETURNING id;
-    `, [defaultPassword, contactIds[0], contactIds[1], contactIds[2], contactIds[3], contactIds[4]]);
+    `, [defaultPassword, contactIds[0], contactIds[1], contactIds[2], contactIds[3], contactIds[4], contactIds[5]]);
 
     const userIds = userResult.rows.map(row => row.id);
 
@@ -42,89 +44,98 @@ const seedDatabase = async () => {
     const dormResult = await client.query(`
       INSERT INTO dormitories (name, address, contact_id, admin_id, total_rooms, available_rooms)
       VALUES 
-        ('VGTU Bendrabutis Nr. 1', 'Saulėtekio al. 39, Vilnius', $1, $2, 120, 45),
-        ('VGTU Bendrabutis Nr. 2', 'Saulėtekio al. 41, Vilnius', $1, $2, 100, 30)
+        ('VGTU Bendrabutis Nr. 1', 'Saulėtekio al. 39, Vilnius', $1, $2, 8, 5),
+        ('VGTU Bendrabutis Nr. 2', 'Saulėtekio al. 41, Vilnius', $1, $2, 0, 0),
+        ('VGTU Bendrabutis Nr. 3', 'Saulėtekio al. 60, Vilnius', $1, $2, 0, 0)
       RETURNING id;
     `, [contactIds[1], userIds[1]]);
 
     const dormIds = dormResult.rows.map(row => row.id);
 
     // Insert rooms
+    // Užtikrinti, kad occupied_beds atitinka realias sutartis
     const roomResult = await client.query(`
       INSERT INTO rooms (dormitory_id, room_number, floor, capacity, occupied_beds, price, room_type, status, description, amenities)
       VALUES 
-        ($1, '101', 1, 2, 0, 150.00, 'Dvivietis', 'AVAILABLE', 'Jaukus dvivietis kambarys su baldais', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
-        ($1, '102', 1, 2, 1, 150.00, 'Dvivietis', 'AVAILABLE', 'Šviesus kambarys su vaizdu į kiemą', ARRAY['Wi-Fi', 'Baldai', 'Duš as']),
-        ($1, '201', 2, 3, 0, 120.00, 'Trivietis', 'AVAILABLE', 'Erdvus trivietis kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Mikrobangų krosnelė']),
-        ($1, '202', 2, 2, 2, 150.00, 'Dvivietis', 'OCCUPIED', 'Kambarys užimtas', ARRAY['Wi-Fi', 'Baldai']),
-        ($2, '101', 1, 2, 0, 160.00, 'Dvivietis', 'AVAILABLE', 'Naujai renovuotas kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius']),
-        ($2, '102', 1, 3, 1, 130.00, 'Trivietis', 'AVAILABLE', 'Didelis kambarys su puikiu vaizdu', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
-        ($2, '201', 2, 2, 0, 160.00, 'Dvivietis', 'RESERVED', 'Rezervuotas kambarys', ARRAY['Wi-Fi', 'Baldai']),
-        ($2, '301', 3, 2, 0, 170.00, 'Dvivietis', 'AVAILABLE', 'Premium kambarys aukštame aukšte', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius', 'Balkonas'])
+        -- Kambarys 101: Vilius gyvena (1 ACTIVE sutartis)
+        ($1, '101', 1, 1, 1, 150.00, 'Vienvietis', 'OCCUPIED', 'Jaukus vienvietis kambarys su baldais', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
+        
+        -- Kambarys 102: 2 vietos, 1 SIGNED sutartis (Augustas), 1 PENDING apžiūra (Tomas)
+        ($1, '102', 1, 2, 1, 140.00, 'Dvivietis', 'AVAILABLE', 'Šviesus kambarys su vaizdu į kiemą', ARRAY['Wi-Fi', 'Baldai', 'Dušas']),
+        
+        -- Kambarys 201: visiškai laisvas, 1 APPROVED apžiūra
+        ($1, '201', 2, 3, 0, 120.00, 'Trivietis', 'RESERVED', 'Erdvus trivietis kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Mikrobangų krosnelė']),
+        
+        -- Kambarys 202: visiškai laisvas
+        ($1, '202', 2, 2, 0, 150.00, 'Dvivietis', 'AVAILABLE', 'Laisvas kambarys', ARRAY['Wi-Fi', 'Baldai']),
+        
+        -- Kambarys 301: visiškai laisvas
+        ($1, '301', 3, 2, 0, 160.00, 'Dvivietis', 'AVAILABLE', 'Naujai renovuotas kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius']),
+        
+        -- Kambarys 302: visiškai laisvas
+        ($1, '302', 3, 3, 0, 130.00, 'Trivietis', 'AVAILABLE', 'Didelis kambarys su puikiu vaizdu', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
+        
+        -- Kambarys 401: visiškai laisvas
+        ($1, '401', 4, 2, 0, 160.00, 'Dvivietis', 'AVAILABLE', 'Kambarys ketvirtame aukšte', ARRAY['Wi-Fi', 'Baldai']),
+        
+        -- Kambarys 501: visiškai laisvas
+        ($1, '501', 5, 2, 0, 170.00, 'Dvivietis', 'AVAILABLE', 'Premium kambarys aukštame aukšte', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius', 'Balkonas'])
       RETURNING id;
-    `, [dormIds[0], dormIds[1]]);
+    `, [dormIds[0]]);
 
     const roomIds = roomResult.rows.map(row => row.id);
 
-    const contractResult = await client.query(`
+    // Contracts
+    // 1) Vilius (student1) - ACTIVE sutartis kambaryje 101
+    const seqRes1 = await client.query(`SELECT nextval('contract_sequence') AS seq`);
+    const seq1 = seqRes1.rows[0].seq;
+    const contractNumber1 = `CNT-${String(seq1).padStart(4, '0')}`;
+
+    await client.query(`
       INSERT INTO contracts (student_id, room_id, contract_number, start_date, end_date, monthly_price, status, signed_at)
       VALUES 
-        ($1, $2, 'CNT-0001', '2025-09-01', '2026-06-30', 150.00, 'ACTIVE', CURRENT_TIMESTAMP)
-      RETURNING id;
-    `, [userIds[2], roomIds[0]]);
+        ($1, $2, $3, '2025-09-01', '2026-06-30', 150.00, 'ACTIVE', CURRENT_TIMESTAMP)
+    `, [userIds[2], roomIds[0], contractNumber1]);
 
-    // Atnaujinam kambario užimtumą
-    await client.query(`
-      UPDATE rooms
-      SET occupied_beds = occupied_beds + 1,
-          status = 'OCCUPIED'
-      WHERE id = $1
-    `, [roomIds[0]]);
+    // 2) Augustas (student2) - SIGNED sutartis kambaryje 102 (laukia admin patvirtinimo)
+    const seqRes2 = await client.query(`SELECT nextval('contract_sequence') AS seq`);
+    const seq2 = seqRes2.rows[0].seq;
+    const contractNumber2 = `CNT-${String(seq2).padStart(4, '0')}`;
 
-    // Insert sample requests
     await client.query(`
-      INSERT INTO requests (student_id, room_id, status, documents)
+      INSERT INTO contracts (student_id, room_id, contract_number, start_date, end_date, monthly_price, status, signed_at)
       VALUES 
-        ($1, $2, 'SUBMITTED', '{"declaration": "path/to/declaration.pdf", "income_statement": "path/to/income.pdf"}'),
-        ($3, $4, 'UNDER_REVIEW', '{"declaration": "path/to/declaration2.pdf"}')
-    `, [userIds[2], roomIds[0], userIds[3], roomIds[1]]);
+        ($1, $2, $3, '2025-09-01', '2026-06-30', 140.00, 'SIGNED', CURRENT_TIMESTAMP)
+    `, [userIds[3], roomIds[1], contractNumber2]);
 
-    // Insert sample reservations
-    await client.query(`
-      INSERT INTO reservations (student_id, room_id, start_date, end_date, status)
-      VALUES 
-        ($1, $2, '2025-09-01', '2026-06-30', 'PENDING_APPROVAL'),
-        ($3, $4, '2025-09-01', '2026-06-30', 'APPROVED')
-    `, [userIds[2], roomIds[2], userIds[3], roomIds[6]]);
-
-    // Insert sample inspections
+    // Inspections
+    // 1) Tomas (student3) - PENDING apžiūra kambaryje 201 (rezervuoja dar 1 vietą)
     await client.query(`
       INSERT INTO inspections (room_id, student_id, supervisor_id, inspection_date, inspection_time, status, resident_will_attend)
       VALUES 
-        ($1, $2, $3, '2025-02-15', '14:00:00', 'PENDING', NULL),
-        ($4, $5, $3, '2025-02-16', '10:00:00', 'APPROVED', true)
-    `, [roomIds[0], userIds[2], userIds[4], roomIds[1], userIds[3]]);
+        ($1, $2, $3, '2025-02-20', '14:00:00', 'PENDING', NULL)
+    `, [roomIds[2], userIds[5], userIds[4]]);
 
-    // Insert sample notifications
+    // Atnaujiname student1 kontaktinę informaciją su bendrabučio adresu
     await client.query(`
-      INSERT INTO notifications (user_id, title, message, type, status)
-      VALUES 
-        ($1, 'Sveiki atvykę!', 'Jūsų paskyra sėkmingai sukurta. Prašome pasikeisti slaptažodį.', 'INFO', 'UNSEEN'),
-        ($2, 'Naujas prašymas', 'Gautas naujas apgyvendinimo prašymas peržiūrai.', 'REQUEST', 'UNSEEN'),
-        ($3, 'Apžiūra patvirtinta', 'Jūsų kambario apžiūra buvo patvirtinta. Data: 2025-02-16, laikas: 10:00', 'INSPECTION', 'UNSEEN')
-    `, [userIds[2], userIds[0], userIds[3]]);
+      UPDATE contact_information
+      SET address = $1
+      WHERE id = $2
+    `, ['Saulėtekio al. 39, Vilnius', contactIds[2]]);
+
+    // Atnaujiname student2 kontaktinę informaciją su bendrabučio adresu (nors sutartis dar SIGNED)
+    await client.query(`
+      UPDATE contact_information
+      SET address = $1
+      WHERE id = $2
+    `, [null, contactIds[3]]);
 
     await client.query('COMMIT');
-    console.log('✅ Database seeded successfully!');
-    console.log('\n📋 Test Users:');
-    console.log('Admin: admin@vgtu.lt / password123');
-    console.log('Dorm Admin: dorm1@vgtu.lt / password123');
-    console.log('Student 1: student1@vgtu.lt / password123');
-    console.log('Student 2: student2@vgtu.lt / password123');
-    console.log('Supervisor: supervisor@vgtu.lt / password123');
+    console.log('Database seeded successfully!');
+   
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Error seeding database:', error);
+    console.error('Error seeding database:', error);
     throw error;
   } finally {
     client.release();
@@ -134,10 +145,10 @@ const seedDatabase = async () => {
 // Run seed
 seedDatabase()
   .then(() => {
-    console.log('✅ Seeding completed successfully');
+    console.log('Seeding completed successfully');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('❌ Seeding failed:', error);
+    console.error('Seeding failed:', error);
     process.exit(1);
   });

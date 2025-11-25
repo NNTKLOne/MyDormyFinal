@@ -85,6 +85,9 @@ function AdminDashboard() {
 
   const handleCreateUser = async () => {
     try {
+
+      const isStudent = userDialog.user_type === 'STUDENT';
+
       const response = await axios.post('/api/users', {
         first_name: userDialog.first_name,
         last_name: userDialog.last_name,
@@ -94,7 +97,7 @@ function AdminDashboard() {
         study_program: userDialog.study_program || null,
         student_id: userDialog.student_id || null,
         phone: userDialog.phone || null,
-        address: userDialog.address || null
+        address: isStudent ? null : (userDialog.address || null)
       });
 
       setTempPassword(response.data.data.temporaryPassword);
@@ -293,6 +296,7 @@ function AdminDashboard() {
                   <Grid item xs={12} md={4}>
                     <TextField
                       fullWidth
+                      required
                       label="Fakultetas"
                       value={userDialog.faculty}
                       onChange={(e) => setUserDialog({ ...userDialog, faculty: e.target.value })}
@@ -301,6 +305,7 @@ function AdminDashboard() {
                   <Grid item xs={12} md={4}>
                     <TextField
                       fullWidth
+                      required
                       label="Studijų programa"
                       value={userDialog.study_program}
                       onChange={(e) => setUserDialog({ ...userDialog, study_program: e.target.value })}
@@ -309,6 +314,7 @@ function AdminDashboard() {
                   <Grid item xs={12} md={4}>
                     <TextField
                       fullWidth
+                      required
                       label="Studento ID"
                       value={userDialog.student_id}
                       onChange={(e) => setUserDialog({ ...userDialog, student_id: e.target.value })}
@@ -324,6 +330,7 @@ function AdminDashboard() {
                   onChange={(e) => setUserDialog({ ...userDialog, phone: e.target.value })}
                 />
               </Grid>
+              {userDialog.user_type !== 'STUDENT' && (
               <Grid item xs={12} md={6}>
                 <TextField
                   fullWidth
@@ -332,6 +339,7 @@ function AdminDashboard() {
                   onChange={(e) => setUserDialog({ ...userDialog, address: e.target.value })}
                 />
               </Grid>
+              )}
             </Grid>
           )}
         </DialogContent>

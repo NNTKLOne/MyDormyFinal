@@ -11,16 +11,13 @@ const createTables = async () => {
       DROP TABLE IF EXISTS notifications CASCADE;
       DROP TABLE IF EXISTS inspections CASCADE;
       DROP TABLE IF EXISTS contracts CASCADE;
-      DROP TABLE IF EXISTS reservations CASCADE;
-      DROP TABLE IF EXISTS requests CASCADE;
       DROP TABLE IF EXISTS rooms CASCADE;
       DROP TABLE IF EXISTS dormitories CASCADE;
       DROP TABLE IF EXISTS contact_information CASCADE;
       DROP TABLE IF EXISTS users CASCADE;
+      DROP SEQUENCE IF EXISTS contract_sequence CASCADE;
       DROP TYPE IF EXISTS user_type CASCADE;
       DROP TYPE IF EXISTS notification_status CASCADE;
-      DROP TYPE IF EXISTS request_status CASCADE;
-      DROP TYPE IF EXISTS reservation_status CASCADE;
       DROP TYPE IF EXISTS inspection_status CASCADE;
       DROP TYPE IF EXISTS room_status CASCADE;
       DROP TYPE IF EXISTS contract_status CASCADE;
@@ -29,9 +26,6 @@ const createTables = async () => {
     // Create ENUM types
     await client.query(`
       CREATE TYPE user_type AS ENUM ('STUDENT', 'UNIVERSITY_ADMIN', 'DORMITORY_ADMIN', 'SUPERVISOR', 'RESIDENT');
-      CREATE TYPE notification_status AS ENUM ('SEEN', 'UNSEEN');
-      CREATE TYPE request_status AS ENUM ('SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED');
-      CREATE TYPE reservation_status AS ENUM ('PENDING_APPROVAL', 'APPROVED', 'CANCELED');
       CREATE TYPE inspection_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED', 'COMPLETED');
       CREATE TYPE room_status AS ENUM ('AVAILABLE', 'RESERVED', 'OCCUPIED');
       CREATE TYPE contract_status AS ENUM ('DRAFT', 'SIGNED', 'ACTIVE', 'EXPIRED', 'TERMINATED');
@@ -92,8 +86,6 @@ const createTables = async () => {
       );
     `);
 
-
-
     // Create rooms table
     await client.query(`
       CREATE TABLE rooms (
@@ -115,37 +107,6 @@ const createTables = async () => {
       );
     `);
 
-    // Create requests table (OPTIONAL - can be used for future)
-    await client.query(`
-      CREATE TABLE requests (
-        id SERIAL PRIMARY KEY,
-        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-        status request_status DEFAULT 'SUBMITTED',
-        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        reviewed_at TIMESTAMP,
-        reviewed_by INTEGER REFERENCES users(id) ON DELETE SET NULL,
-        rejection_reason TEXT,
-        documents JSONB,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
-    // Create reservations table (OPTIONAL - can be used for future)
-    await client.query(`
-      CREATE TABLE reservations (
-        id SERIAL PRIMARY KEY,
-        student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        status reservation_status DEFAULT 'PENDING_APPROVAL',
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
-
     // Create sequence for contract numbering
     await client.query(`
       CREATE SEQUENCE IF NOT EXISTS contract_sequence
@@ -154,13 +115,12 @@ const createTables = async () => {
         NO MINVALUE
         NO MAXVALUE
         CACHE 1;
-      `);
+    `);
 
-    // Create contracts table - request_id is NOW OPTIONAL!
+    // Create contracts table
     await client.query(`
       CREATE TABLE contracts (
         id SERIAL PRIMARY KEY,
-        request_id INTEGER REFERENCES requests(id) ON DELETE SET NULL,
         student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
         contract_number VARCHAR(50) UNIQUE,
@@ -193,39 +153,17 @@ const createTables = async () => {
       );
     `);
 
-    // Create notifications table
-    await client.query(`
-      CREATE TABLE notifications (
-        id SERIAL PRIMARY KEY,
-        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title VARCHAR(255) NOT NULL,
-        message TEXT NOT NULL,
-        type VARCHAR(50),
-        status notification_status DEFAULT 'UNSEEN',
-        related_entity_type VARCHAR(50),
-        related_entity_id INTEGER,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        read_at TIMESTAMP
-      );
-    `);
-
     // Create indexes for better performance
     await client.query(`
       CREATE INDEX idx_users_email ON users(email);
       CREATE INDEX idx_users_type ON users(user_type);
       CREATE INDEX idx_rooms_dormitory ON rooms(dormitory_id);
       CREATE INDEX idx_rooms_status ON rooms(status);
-      CREATE INDEX idx_requests_student ON requests(student_id);
-      CREATE INDEX idx_requests_status ON requests(status);
-      CREATE INDEX idx_reservations_student ON reservations(student_id);
-      CREATE INDEX idx_reservations_room ON reservations(room_id);
       CREATE INDEX idx_contracts_student ON contracts(student_id);
       CREATE INDEX idx_contracts_status ON contracts(status);
       CREATE INDEX idx_inspections_date ON inspections(inspection_date);
       CREATE INDEX idx_inspections_student ON inspections(student_id);
       CREATE INDEX idx_inspections_status ON inspections(status);
-      CREATE INDEX idx_notifications_user ON notifications(user_id);
-      CREATE INDEX idx_notifications_status ON notifications(status);
     `);
 
     // Create updated_at trigger function
@@ -240,7 +178,7 @@ const createTables = async () => {
     `);
 
     // Apply updated_at trigger to all tables
-    const tables = ['users', 'contact_information', 'dormitories', 'rooms', 'requests', 'reservations', 'contracts', 'inspections'];
+    const tables = ['users', 'contact_information', 'dormitories', 'rooms', 'contracts', 'inspections'];
     for (const table of tables) {
       await client.query(`
         CREATE TRIGGER update_${table}_updated_at
@@ -251,10 +189,10 @@ const createTables = async () => {
     }
 
     await client.query('COMMIT');
-    console.log('✅ Database tables created successfully!');
+    console.log('Database tables created successfully!');
   } catch (error) {
     await client.query('ROLLBACK');
-    console.error('❌ Error creating tables:', error);
+    console.error('Error creating tables:', error);
     throw error;
   } finally {
     client.release();
@@ -264,10 +202,10 @@ const createTables = async () => {
 // Run migration
 createTables()
   .then(() => {
-    console.log('✅ Migration completed successfully');
+    console.log('Migration completed successfully');
     process.exit(0);
   })
   .catch((error) => {
-    console.error('❌ Migration failed:', error);
+    console.error('Migration failed:', error);
     process.exit(1);
   });

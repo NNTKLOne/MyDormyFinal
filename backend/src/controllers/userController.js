@@ -53,12 +53,14 @@ export const createUser = async (req, res) => {
     const temporaryPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
+    const isStudent = user_type === 'STUDENT';
+
     // Create contact information first
     const contactResult = await query(
       `INSERT INTO contact_information (phone, email, address) 
        VALUES ($1, $2, $3) 
        RETURNING id`,
-      [phone || null, email, address || null]
+      [phone || null, email, isStudent ? null : (address || null)]
     );
     const contact_id = contactResult.rows[0].id;
 

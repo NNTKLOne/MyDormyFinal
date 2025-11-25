@@ -90,7 +90,7 @@ export const createInspection = async (req, res) => {
       [room_id, student_id, inspection_date, inspection_time]
     );
 
-    // Update room status to RESERVED if this is first reservation
+    // Update room status to RESERVED if this is first inspection reservation 
     const pendingCount = await query(
       `SELECT COUNT(*) as count FROM inspections 
        WHERE room_id = $1 AND status IN ('PENDING', 'APPROVED')`,
