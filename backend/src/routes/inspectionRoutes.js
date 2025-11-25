@@ -4,7 +4,8 @@ import {
   getSupervisorInspections,
   updateInspectionStatus,
   setResidentAttendance,
-  getMyUpcomingVisits
+  getMyUpcomingVisits,
+  getMyInspections
 } from '../controllers/inspectionController.js';
 import { authMiddleware, authorize } from '../middleware/auth.js';
 
@@ -15,5 +16,5 @@ router.get('/supervisor', authMiddleware, authorize('SUPERVISOR'), getSupervisor
 router.put('/:id/status', authMiddleware, authorize('SUPERVISOR'), updateInspectionStatus);
 router.put('/:id/attendance', authMiddleware, setResidentAttendance);
 router.get('/my-visits', authMiddleware, getMyUpcomingVisits);
-
+router.get('/my', authMiddleware, authorize('STUDENT'), getMyInspections);
 export default router;

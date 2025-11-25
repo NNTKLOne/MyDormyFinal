@@ -6,14 +6,10 @@ import { errorHandler } from './middleware/errorHandler.js';
 // Import routes
 import authRoutes from './routes/authRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
-import reservationRoutes from './routes/reservationRoutes.js';
 import inspectionRoutes from './routes/inspectionRoutes.js';
-import requestRoutes from './routes/requestRoutes.js';
-import contractRoutes from './routes/contractRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-import notificationRoutes from './routes/notificationRoutes.js';
+import contractRoutes from './routes/contractRoutes.js';
 
-// Load environment variables
 dotenv.config();
 
 const app = express();
@@ -30,25 +26,22 @@ app.use(express.urlencoded({ extended: true }));
 
 // Test database connection
 
+
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({
     success: true,
     message: 'MyDormy API is running!',
-    timestamp: new Date().toISOString(),
-    environment: process.env.NODE_ENV || 'development'
+    timestamp: new Date().toISOString()
   });
 });
 
 // API Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
-app.use('/api/reservations', reservationRoutes);
 app.use('/api/inspections', inspectionRoutes);
-app.use('/api/requests', requestRoutes);
-app.use('/api/contracts', contractRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/contracts', contractRoutes);
 
 // 404 handler
 app.use((req, res) => {
@@ -58,7 +51,7 @@ app.use((req, res) => {
   });
 });
 
-// Error handler (must be last)
+// Error handler
 app.use(errorHandler);
 
 // Start server
@@ -67,11 +60,9 @@ app.listen(PORT, () => {
   console.log(`🚀 MyDormy Server running on port ${PORT}`);
   console.log(`📍 API: http://localhost:${PORT}`);
   console.log(`🏥 Health: http://localhost:${PORT}/health`);
-  console.log(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
 
-// Handle unhandled promise rejections
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Promise Rejection:', err);
 });
