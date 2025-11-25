@@ -88,8 +88,6 @@ const createTables = async () => {
       );
     `);
 
-
-
     // Create rooms table
     await client.query(`
       CREATE TABLE rooms (
