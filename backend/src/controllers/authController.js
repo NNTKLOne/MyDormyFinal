@@ -72,7 +72,7 @@ export const login = async (req, res) => {
       data: {
         user,
         token,
-        mustChangePassword: user.must_change_password
+        must_change_password: user.must_change_password
       }
     });
   } catch (error) {
@@ -91,7 +91,7 @@ export const getMe = async (req, res) => {
   try {
     const result = await query(
       `SELECT u.id, u.first_name, u.last_name, u.email, u.user_type, 
-              u.faculty, u.study_program, u.student_id, u.is_active,
+              u.faculty, u.study_program, u.student_id, u.is_active, u.must_change_password,
               ci.phone, ci.address
        FROM users u 
        LEFT JOIN contact_information ci ON u.contact_id = ci.id 
@@ -164,14 +164,23 @@ export const changePassword = async (req, res) => {
 
     // Update password
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
-      [hashedPassword, req.user.id]
+        'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
+        [hashedPassword, req.user.id]
+    );
+
+// Get updated user
+    const updatedUserResult = await query(
+        `SELECT id, first_name, last_name, email, user_type, must_change_password
+   FROM users WHERE id = $1`,
+        [req.user.id]
     );
 
     res.json({
       success: true,
-      message: 'Slaptažodis sėkmingai pakeistas'
+      message: 'Slaptažodis sėkmingai pakeistas',
+      user: updatedUserResult.rows[0]   // 👈 GRĄŽINAM USER
     });
+
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({

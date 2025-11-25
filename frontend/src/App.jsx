@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, Box, Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, Typography, Divider } from '@mui/material';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { useState } from 'react';
+
 import {
   Dashboard as DashboardIcon,
   Search as SearchIcon,
@@ -9,11 +9,14 @@ import {
   Logout as LogoutIcon,
   AdminPanelSettings as AdminIcon,
   SupervisorAccount as SupervisorIcon,
-  MeetingRoom as RoomIcon,
-  Notifications as NotificationsIcon,
-  Badge
+  MeetingRoom as RoomIcon
 } from '@mui/icons-material';
+
 import { useNavigate, useLocation } from 'react-router-dom';
+
+import RequirePasswordChange from "./components/RequirePasswordChange";
+import PreventAccessIfPasswordChanged from "./components/PreventAccessIfPasswordChanged";
+import ChangePasswordPage from "./pages/ChangePasswordPage";
 
 // Pages
 import LoginPage from './pages/LoginPage';
@@ -24,23 +27,33 @@ import SupervisorDashboard from './pages/SupervisorDashboard';
 import DormAdminDashboard from './pages/DormAdminDashboard';
 import ResidentDashboard from './pages/ResidentDashboard';
 
+// ---------- ROLE REDIRECT HELPER --------------
+const getRedirectForRole = (role) => {
+  switch (role) {
+    case "STUDENT":
+      return "/rooms";
+    case "UNIVERSITY_ADMIN":
+      return "/admin";
+    case "DORMITORY_ADMIN":
+      return "/dorm-admin";
+    case "SUPERVISOR":
+      return "/supervisor";
+    default:
+      return "/rooms";
+  }
+};
+// -----------------------------------------------
+
 const theme = createTheme({
   palette: {
-    primary: {
-      main: '#1976d2',
-    },
-    secondary: {
-      main: '#dc004e',
-    },
+    primary: { main: '#1976d2' },
+    secondary: { main: '#dc004e' },
   },
-  typography: {
-    fontFamily: 'Roboto, sans-serif',
-  },
+  typography: { fontFamily: 'Roboto, sans-serif' },
 });
 
 const DRAWER_WIDTH = 260;
 
-// Sidebar Navigation
 function Sidebar() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -48,249 +61,207 @@ function Sidebar() {
 
   if (!user) return null;
 
-  const getMenuItems = () => {
-    const items = [];
+  const menuItems = [];
 
-    if (user.user_type === 'STUDENT') {
-      items.push(
+  if (user.user_type === "STUDENT") {
+    menuItems.push(
         { text: 'Kambarių paieška', icon: <SearchIcon />, path: '/rooms' },
-        { text: 'Mano apžiūros', icon: <DashboardIcon />, path: '/dashboard' }
-      );
-    } else if (user.user_type === 'SUPERVISOR') {
-      items.push(
-        { text: 'Apžiūrų valdymas', icon: <SupervisorIcon />, path: '/supervisor' }
-      );
-    } else if (user.user_type === 'UNIVERSITY_ADMIN') {
-      items.push(
-        { text: 'Vartotojų valdymas', icon: <AdminIcon />, path: '/admin' },
-        { text: 'Kambarių paieška', icon: <SearchIcon />, path: '/rooms' }
-      );
-    } else if (user.user_type === 'DORMITORY_ADMIN') {
-      items.push(
-        { text: 'Kambarių valdymas', icon: <RoomIcon />, path: '/dorm-admin' }
-      );
-    }
-
-    // Check if user is a resident
-    // This would need an API call to check if user has active contract
-    // For now, show for all who might be residents
-    if (user.user_type === 'STUDENT') {
-      items.push(
-        { text: 'Mano kambarys', icon: <CalendarIcon />, path: '/resident' }
-      );
-    }
-
-    return items;
-  };
-
-  const menuItems = getMenuItems();
-
-  return (
-    <Drawer
-      variant="permanent"
-      sx={{
-        width: DRAWER_WIDTH,
-        flexShrink: 0,
-        '& .MuiDrawer-paper': {
-          width: DRAWER_WIDTH,
-          boxSizing: 'border-box',
-        },
-      }}
-    >
-      <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
-        <Typography variant="h5" sx={{ fontWeight: 'bold' }}>
-          MyDormy
-        </Typography>
-        <Typography variant="body2" sx={{ mt: 1 }}>
-          {user.first_name} {user.last_name}
-        </Typography>
-        <Typography variant="caption" sx={{ opacity: 0.8 }}>
-          {user.user_type}
-        </Typography>
-      </Box>
-
-      <List sx={{ pt: 2 }}>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-              sx={{
-                '&.Mui-selected': {
-                  bgcolor: 'primary.light',
-                  color: 'primary.main',
-                  '&:hover': {
-                    bgcolor: 'primary.light',
-                  },
-                },
-              }}
-            >
-              <ListItemIcon sx={{ color: location.pathname === item.path ? 'primary.main' : 'inherit' }}>
-                {item.icon}
-              </ListItemIcon>
-              <ListItemText primary={item.text} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-
-        <Divider sx={{ my: 2 }} />
-
-        <ListItem disablePadding>
-          <ListItemButton onClick={() => {
-            logout();
-            navigate('/login');
-          }}>
-            <ListItemIcon>
-              <LogoutIcon />
-            </ListItemIcon>
-            <ListItemText primary="Atsijungti" />
-          </ListItemButton>
-        </ListItem>
-      </List>
-    </Drawer>
-  );
-}
-
-// Protected Route Component
-function ProtectedRoute({ children, allowedRoles }) {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh' }}>
-        Kraunama...
-      </Box>
+        { text: 'Mano apžiūros', icon: <DashboardIcon />, path: '/dashboard' },
+        { text: 'Mano kambarys', icon: <CalendarIcon />, path: '/resident' },
     );
   }
 
-  if (!user) {
-    return <Navigate to="/login" replace />;
+  if (user.user_type === "UNIVERSITY_ADMIN") {
+    menuItems.push(
+        { text: 'Vartotojų valdymas', icon: <AdminIcon />, path: '/admin' },
+        { text: 'Kambarių paieška', icon: <SearchIcon />, path: '/rooms' }
+    );
   }
 
-  if (allowedRoles && !allowedRoles.includes(user.user_type)) {
-    return <Navigate to="/" replace />;
+  if (user.user_type === "DORMITORY_ADMIN") {
+    menuItems.push(
+        { text: 'Kambarių valdymas', icon: <RoomIcon />, path: '/dorm-admin' }
+    );
   }
 
-  return children;
+  if (user.user_type === "SUPERVISOR") {
+    menuItems.push(
+        { text: 'Apžiūrų valdymas', icon: <SupervisorIcon />, path: '/supervisor' }
+    );
+  }
+
+  return (
+      <Drawer
+          variant="permanent"
+          sx={{
+            width: DRAWER_WIDTH,
+            flexShrink: 0,
+            '& .MuiDrawer-paper': {
+              width: DRAWER_WIDTH,
+              boxSizing: 'border-box',
+            },
+          }}
+      >
+        <Box sx={{ p: 2, bgcolor: 'primary.main', color: 'white' }}>
+          <Typography variant="h5" sx={{ fontWeight: 'bold' }}>MyDormy</Typography>
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            {user.first_name} {user.last_name}
+          </Typography>
+          <Typography variant="caption" sx={{ opacity: 0.8 }}>
+            {user.user_type}
+          </Typography>
+        </Box>
+
+        <List sx={{ pt: 2 }}>
+          {menuItems.map((item) => (
+              <ListItem key={item.text} disablePadding>
+                <ListItemButton
+                    selected={location.pathname === item.path}
+                    onClick={() => navigate(item.path)}
+                >
+                  <ListItemIcon sx={{ color: location.pathname === item.path ? 'primary.main' : 'inherit' }}>
+                    {item.icon}
+                  </ListItemIcon>
+                  <ListItemText primary={item.text} />
+                </ListItemButton>
+              </ListItem>
+          ))}
+
+          <Divider sx={{ my: 2 }} />
+
+          <ListItem disablePadding>
+            <ListItemButton
+                onClick={() => {
+                  logout();
+                  navigate('/login');
+                }}
+            >
+              <ListItemIcon><LogoutIcon /></ListItemIcon>
+              <ListItemText primary="Atsijungti" />
+            </ListItemButton>
+          </ListItem>
+        </List>
+      </Drawer>
+  );
 }
 
-// Main App Content
+function ProtectedRoute({ children, allowedRoles }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return null;
+
+  if (!user) return <Navigate to="/login" replace />;
+
+  if (allowedRoles && !allowedRoles.includes(user.user_type)) {
+    return <Navigate to={getRedirectForRole(user.user_type)} replace />;
+  }
+
+  return <RequirePasswordChange>{children}</RequirePasswordChange>;
+}
+
 function AppContent() {
   const { user } = useAuth();
 
   return (
-    <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-      {user && <Sidebar />}
-      
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          bgcolor: 'background.default',
-          p: 0,
-          marginLeft: user ? 0 : 0,
-        }}
-      >
-        <Routes>
-          {/* Public Routes */}
-          <Route path="/login" element={<LoginPage />} />
+      <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+        {user && <Sidebar />}
 
-          {/* Student Routes */}
-          <Route
-            path="/rooms"
-            element={
-              <ProtectedRoute allowedRoles={['STUDENT', 'UNIVERSITY_ADMIN']}>
-                <RoomsPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute allowedRoles={['STUDENT']}>
-                <StudentDashboard />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/resident"
-            element={
-              <ProtectedRoute allowedRoles={['STUDENT']}>
-                <ResidentDashboard />
-              </ProtectedRoute>
-            }
-          />
+        <Box component="main" sx={{ flexGrow: 1 }}>
+          <Routes>
 
-          {/* Admin Routes */}
-          <Route
-            path="/admin"
-            element={
-              <ProtectedRoute allowedRoles={['UNIVERSITY_ADMIN']}>
-                <AdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+            <Route path="/login" element={<LoginPage />} />
 
-          {/* Dorm Admin Routes */}
-          <Route
-            path="/dorm-admin"
-            element={
-              <ProtectedRoute allowedRoles={['DORMITORY_ADMIN']}>
-                <DormAdminDashboard />
-              </ProtectedRoute>
-            }
-          />
+            <Route
+                path="/change-password"
+                element={
+                  <PreventAccessIfPasswordChanged>
+                    <ChangePasswordPage />
+                  </PreventAccessIfPasswordChanged>
+                }
+            />
 
-          {/* Supervisor Routes */}
-          <Route
-            path="/supervisor"
-            element={
-              <ProtectedRoute allowedRoles={['SUPERVISOR']}>
-                <SupervisorDashboard />
-              </ProtectedRoute>
-            }
-          />
+            <Route
+                path="/rooms"
+                element={
+                  <ProtectedRoute allowedRoles={['STUDENT', 'UNIVERSITY_ADMIN']}>
+                    <RoomsPage />
+                  </ProtectedRoute>
+                }
+            />
 
-          {/* Default Route */}
-          <Route
-            path="/"
-            element={
-              user ? (
-                user.user_type === 'STUDENT' ? (
-                  <Navigate to="/rooms" replace />
-                ) : user.user_type === 'UNIVERSITY_ADMIN' ? (
-                  <Navigate to="/admin" replace />
-                ) : user.user_type === 'SUPERVISOR' ? (
-                  <Navigate to="/supervisor" replace />
-                ) : user.user_type === 'DORMITORY_ADMIN' ? (
-                  <Navigate to="/dorm-admin" replace />
-                ) : (
-                  <Navigate to="/rooms" replace />
-                )
-              ) : (
-                <Navigate to="/login" replace />
-              )
-            }
-          />
+            <Route
+                path="/dashboard"
+                element={
+                  <ProtectedRoute allowedRoles={['STUDENT']}>
+                    <StudentDashboard />
+                  </ProtectedRoute>
+                }
+            />
 
-          {/* 404 Route */}
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
+            <Route
+                path="/resident"
+                element={
+                  <ProtectedRoute allowedRoles={['STUDENT']}>
+                    <ResidentDashboard />
+                  </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute allowedRoles={['UNIVERSITY_ADMIN']}>
+                    <AdminDashboard />
+                  </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/dorm-admin"
+                element={
+                  <ProtectedRoute allowedRoles={['DORMITORY_ADMIN']}>
+                    <DormAdminDashboard />
+                  </ProtectedRoute>
+                }
+            />
+
+            <Route
+                path="/supervisor"
+                element={
+                  <ProtectedRoute allowedRoles={['SUPERVISOR']}>
+                    <SupervisorDashboard />
+                  </ProtectedRoute>
+                }
+            />
+
+            {/* DEFAULT REDIRECT */}
+            <Route
+                path="/"
+                element={
+                  user
+                      ? <Navigate to={getRedirectForRole(user.user_type)} replace />
+                      : <Navigate to="/login" replace />
+                }
+            />
+
+            <Route path="*" element={<Navigate to="/" replace />} />
+
+          </Routes>
+        </Box>
       </Box>
-    </Box>
   );
 }
 
 function App() {
   return (
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
-      <AuthProvider>
-        <Router>
-          <AppContent />
-        </Router>
-      </AuthProvider>
-    </ThemeProvider>
+      <ThemeProvider theme={theme}>
+        <CssBaseline />
+        <AuthProvider>
+          <Router>
+            <AppContent />
+          </Router>
+        </AuthProvider>
+      </ThemeProvider>
   );
 }
 

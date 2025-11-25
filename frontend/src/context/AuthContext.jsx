@@ -15,6 +15,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
+  const [mustChangePassword, setMustChangePassword] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -29,8 +30,8 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.get('/api/auth/me');
       setUser(response.data.data);
+      setMustChangePassword(response.data.data.must_change_password);
     } catch (error) {
-      console.error('Failed to fetch user:', error);
       logout();
     } finally {
       setLoading(false);
@@ -40,21 +41,31 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
-      const { token, user } = response.data.data;
-      
+
+      const { token, user, must_change_password } = response.data.data;
+
       localStorage.setItem('token', token);
       setToken(token);
       setUser(user);
+      setMustChangePassword(must_change_password);
+
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      return { success: true };
+
+      return {
+        success: true,
+        user,
+        must_change_password
+      };
+
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Prisijungimo klaida' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Prisijungimo klaida'
       };
     }
   };
+
+
 
   const logout = () => {
     localStorage.removeItem('token');
@@ -68,8 +79,11 @@ export const AuthProvider = ({ children }) => {
     login,
     logout,
     loading,
+    mustChangePassword,
+    setMustChangePassword,
     isAuthenticated: !!user
   };
+
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

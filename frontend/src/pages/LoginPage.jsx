@@ -12,6 +12,7 @@ import {
 } from '@mui/material';
 import { useAuth } from '../context/AuthContext';
 
+
 function LoginPage() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -26,15 +27,20 @@ function LoginPage() {
     setLoading(true);
 
     const result = await login(email, password);
-    
+
     if (result.success) {
-      navigate('/rooms');
-    } else {
+      if (result.must_change_password) {
+        navigate('/change-password');
+      } else {
+        navigate('/rooms');
+      }
+  } else {
       setError(result.message);
     }
-    
+
     setLoading(false);
   };
+
 
   return (
     <Container maxWidth="sm">
