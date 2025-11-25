@@ -105,7 +105,7 @@ const createTables = async () => {
       );
     `);
 
-    // Create requests table
+    // Create requests table (OPTIONAL - can be used for future)
     await client.query(`
       CREATE TABLE requests (
         id SERIAL PRIMARY KEY,
@@ -122,7 +122,7 @@ const createTables = async () => {
       );
     `);
 
-    // Create reservations table
+    // Create reservations table (OPTIONAL - can be used for future)
     await client.query(`
       CREATE TABLE reservations (
         id SERIAL PRIMARY KEY,
@@ -136,11 +136,11 @@ const createTables = async () => {
       );
     `);
 
-    // Create contracts table
+    // Create contracts table - request_id is NOW OPTIONAL!
     await client.query(`
       CREATE TABLE contracts (
         id SERIAL PRIMARY KEY,
-        request_id INTEGER NOT NULL REFERENCES requests(id) ON DELETE CASCADE,
+        request_id INTEGER REFERENCES requests(id) ON DELETE SET NULL,
         student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
         contract_number VARCHAR(50) UNIQUE,
@@ -199,7 +199,11 @@ const createTables = async () => {
       CREATE INDEX idx_requests_status ON requests(status);
       CREATE INDEX idx_reservations_student ON reservations(student_id);
       CREATE INDEX idx_reservations_room ON reservations(room_id);
+      CREATE INDEX idx_contracts_student ON contracts(student_id);
+      CREATE INDEX idx_contracts_status ON contracts(status);
       CREATE INDEX idx_inspections_date ON inspections(inspection_date);
+      CREATE INDEX idx_inspections_student ON inspections(student_id);
+      CREATE INDEX idx_inspections_status ON inspections(status);
       CREATE INDEX idx_notifications_user ON notifications(user_id);
       CREATE INDEX idx_notifications_status ON notifications(status);
     `);

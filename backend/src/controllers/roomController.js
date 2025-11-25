@@ -5,25 +5,52 @@ import { query } from '../config/database.js';
 // @access  Public
 export const getRooms = async (req, res) => {
   try {
-    const { 
-      dormitory_id, 
-      min_price, 
-      max_price, 
-      capacity, 
-      status,
-      room_type 
-    } = req.query;
+    const { dormitory_id, min_price, max_price, capacity, room_type, status } = req.query;
+
+    const normalizedStatus = status ? status.toUpperCase() : null;
 
     let queryText = `
-      SELECT r.*, d.name as dormitory_name, d.address as dormitory_address
+      SELECT 
+        r.*,
+        d.name as dormitory_name,
+        d.address as dormitory_address,
+        -- rezervuotos vietos (apžiūros)
+        COALESCE((
+          SELECT COUNT(*) 
+          FROM inspections i
+          WHERE i.room_id = r.id 
+            AND i.status IN ('PENDING', 'APPROVED')
+        ), 0) as reserved_slots,
+        -- realiai laisvos vietos: capacity - užimtos - rezervuotos
+        GREATEST(
+          r.capacity 
+          - COALESCE(r.occupied_beds, 0)
+          - COALESCE((
+            SELECT COUNT(*) 
+            FROM inspections i
+            WHERE i.room_id = r.id 
+              AND i.status IN ('PENDING', 'APPROVED')
+          ), 0),
+          0
+        ) as available_beds
       FROM rooms r
       JOIN dormitories d ON r.dormitory_id = d.id
       WHERE 1=1
     `;
+
     const params = [];
     let paramCount = 1;
 
-    // Apply filters
+    // // Only show rooms with at least 1 available bed (unless admin viewing all)
+    // if (!status) {
+    //   queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
+    // }
+
+      // Tik jei status NEPATEIKTAS - rodom tik kambarius su laisvom vietom
+    if (!normalizedStatus) {
+      queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
+    }
+
     if (dormitory_id) {
       queryText += ` AND r.dormitory_id = $${paramCount}`;
       params.push(dormitory_id);
@@ -43,14 +70,8 @@ export const getRooms = async (req, res) => {
     }
 
     if (capacity) {
-      queryText += ` AND r.capacity = $${paramCount}`;
+      queryText += ` AND r.capacity >= $${paramCount}`;
       params.push(capacity);
-      paramCount++;
-    }
-
-    if (status) {
-      queryText += ` AND r.status = $${paramCount}`;
-      params.push(status);
       paramCount++;
     }
 
@@ -60,7 +81,20 @@ export const getRooms = async (req, res) => {
       paramCount++;
     }
 
-    queryText += ' ORDER BY r.dormitory_id, r.room_number';
+    // if (status) {
+    //   queryText += ` AND r.status = $${paramCount}`;
+    //   params.push(status);
+    //   paramCount++;
+    // }
+
+        // Čia svarbiausia vieta: status filtras TIK jei ne 'ALL'
+    if (normalizedStatus && normalizedStatus !== 'ALL') {
+      queryText += ` AND r.status = $${paramCount}`;
+      params.push(normalizedStatus);
+      paramCount++;
+    }
+
+    queryText += ' ORDER BY d.name, r.room_number';
 
     const result = await query(queryText, params);
 
@@ -73,7 +107,7 @@ export const getRooms = async (req, res) => {
     console.error('Get rooms error:', error);
     res.status(500).json({
       success: false,
-      message: 'Serverio klaida gaunant kambarius'
+      message: 'Serverio klaida'
     });
   }
 };
@@ -86,13 +120,25 @@ export const getRoom = async (req, res) => {
     const { id } = req.params;
 
     const result = await query(
-      `SELECT r.*, d.name as dormitory_name, d.address as dormitory_address,
-              d.id as dormitory_id,
-              ci.phone as dormitory_phone, ci.email as dormitory_email
-       FROM rooms r
-       JOIN dormitories d ON r.dormitory_id = d.id
-       LEFT JOIN contact_information ci ON d.contact_id = ci.id
-       WHERE r.id = $1`,
+      `SELECT 
+        r.*,
+        d.name as dormitory_name,
+        d.address as dormitory_address,
+        (r.capacity - COALESCE(r.occupied_beds, 0)) as available_beds,
+        json_agg(
+          json_build_object(
+            'id', u.id,
+            'first_name', u.first_name,
+            'last_name', u.last_name,
+            'email', u.email
+          )
+        ) FILTER (WHERE u.id IS NOT NULL) as residents
+      FROM rooms r
+      JOIN dormitories d ON r.dormitory_id = d.id
+      LEFT JOIN contracts c ON c.room_id = r.id AND c.status IN ('ACTIVE', 'SIGNED')
+      LEFT JOIN users u ON u.id = c.student_id
+      WHERE r.id = $1
+      GROUP BY r.id, d.id`,
       [id]
     );
 
@@ -103,34 +149,22 @@ export const getRoom = async (req, res) => {
       });
     }
 
-    // Get current residents
-    const residentsResult = await query(
-      `SELECT u.id, u.first_name, u.last_name, u.faculty, u.study_program
-       FROM users u
-       JOIN contracts c ON u.id = c.student_id
-       WHERE c.room_id = $1 AND c.status = 'ACTIVE'`,
-      [id]
-    );
-
-    const room = result.rows[0];
-    room.current_residents = residentsResult.rows;
-
     res.json({
       success: true,
-      data: room
+      data: result.rows[0]
     });
   } catch (error) {
     console.error('Get room error:', error);
     res.status(500).json({
       success: false,
-      message: 'Serverio klaida gaunant kambarį'
+      message: 'Serverio klaida'
     });
   }
 };
 
-// @desc    Create room
+// @desc    Create room with all fields
 // @route   POST /api/rooms
-// @access  Private (Dormitory Admin)
+// @access  Private (Dormitory Admin, University Admin)
 export const createRoom = async (req, res) => {
   try {
     const {
@@ -141,27 +175,56 @@ export const createRoom = async (req, res) => {
       price,
       room_type,
       description,
-      amenities
+      amenities,
+      images
     } = req.body;
 
-    // Validation
     if (!dormitory_id || !room_number || !capacity || !price) {
       return res.status(400).json({
         success: false,
-        message: 'Prašome užpildyti visus privalomus laukus'
+        message: 'Prašome užpildyti visus privalomus laukus (bendrabutis, numeris, vietų skaičius, kaina)'
       });
     }
 
-    const result = await query(
-      `INSERT INTO rooms (dormitory_id, room_number, floor, capacity, price, room_type, description, amenities)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-       RETURNING *`,
-      [dormitory_id, room_number, floor, capacity, price, room_type, description, amenities || []]
+    // Check if room number already exists in this dormitory
+    const existingRoom = await query(
+      'SELECT id FROM rooms WHERE dormitory_id = $1 AND room_number = $2',
+      [dormitory_id, room_number]
     );
 
-    // Update dormitory total rooms count
+    if (existingRoom.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Kambarys su šiuo numeriu jau egzistuoja šiame bendrabutyje'
+      });
+    }
+
+    // Create room with all fields
+    const result = await query(
+      `INSERT INTO rooms 
+       (dormitory_id, room_number, floor, capacity, occupied_beds, price, 
+        room_type, status, description, amenities, images)
+       VALUES ($1, $2, $3, $4, 0, $5, $6, 'AVAILABLE', $7, $8, $9)
+       RETURNING *`,
+      [
+        dormitory_id,
+        room_number,
+        floor || null,
+        capacity,
+        price,
+        room_type || null,
+        description || null,
+        amenities || [],
+        images || []
+      ]
+    );
+
+    // Update dormitory total_rooms and available_rooms
     await query(
-      'UPDATE dormitories SET total_rooms = total_rooms + 1, available_rooms = available_rooms + 1 WHERE id = $1',
+      `UPDATE dormitories 
+       SET total_rooms = total_rooms + 1,
+           available_rooms = available_rooms + 1
+       WHERE id = $1`,
       [dormitory_id]
     );
 
@@ -172,14 +235,6 @@ export const createRoom = async (req, res) => {
     });
   } catch (error) {
     console.error('Create room error:', error);
-    
-    if (error.code === '23505') {
-      return res.status(400).json({
-        success: false,
-        message: 'Kambarys su tokiu numeriu jau egzistuoja šiame bendrabutyje'
-      });
-    }
-
     res.status(500).json({
       success: false,
       message: 'Serverio klaida kuriant kambarį'
@@ -187,9 +242,9 @@ export const createRoom = async (req, res) => {
   }
 };
 
-// @desc    Update room
+// @desc    Update room with all fields
 // @route   PUT /api/rooms/:id
-// @access  Private (Dormitory Admin)
+// @access  Private (Dormitory Admin, University Admin)
 export const updateRoom = async (req, res) => {
   try {
     const { id } = req.params;
@@ -201,18 +256,9 @@ export const updateRoom = async (req, res) => {
       room_type,
       status,
       description,
-      amenities
+      amenities,
+      images
     } = req.body;
-
-    // Check if room exists
-    const checkResult = await query('SELECT * FROM rooms WHERE id = $1', [id]);
-    
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'Kambarys nerastas'
-      });
-    }
 
     const result = await query(
       `UPDATE rooms 
@@ -223,79 +269,123 @@ export const updateRoom = async (req, res) => {
            room_type = COALESCE($5, room_type),
            status = COALESCE($6, status),
            description = COALESCE($7, description),
-           amenities = COALESCE($8, amenities)
-       WHERE id = $9
+           amenities = COALESCE($8, amenities),
+           images = COALESCE($9, images)
+       WHERE id = $10
        RETURNING *`,
-      [room_number, floor, capacity, price, room_type, status, description, amenities, id]
+      [
+        room_number,
+        floor,
+        capacity,
+        price,
+        room_type,
+        status,
+        description,
+        amenities,
+        images,
+        id
+      ]
     );
 
-    res.json({
-      success: true,
-      message: 'Kambarys sėkmingai atnaujintas',
-      data: result.rows[0]
-    });
-  } catch (error) {
-    console.error('Update room error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Serverio klaida atnaujinant kambarį'
-    });
-  }
-};
-
-// @desc    Delete room
-// @route   DELETE /api/rooms/:id
-// @access  Private (Dormitory Admin)
-export const deleteRoom = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check if room exists
-    const checkResult = await query('SELECT dormitory_id FROM rooms WHERE id = $1', [id]);
-    
-    if (checkResult.rows.length === 0) {
+    if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Kambarys nerastas'
       });
     }
 
-    const dormitory_id = checkResult.rows[0].dormitory_id;
+    res.json({
+      success: true,
+      message: 'Kambarys atnaujintas',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    console.error('Update room error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Serverio klaida'
+    });
+  }
+};
+
+// @desc    Delete room
+// @route   DELETE /api/rooms/:id
+// @access  Private (Dormitory Admin, University Admin)
+export const deleteRoom = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Check if room has active contracts
+    const contractCheck = await query(
+      "SELECT COUNT(*) as count FROM contracts WHERE room_id = $1 AND status IN ('ACTIVE', 'SIGNED')",
+      [id]
+    );
+
+    if (parseInt(contractCheck.rows[0].count) > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Negalima ištrinti kambario su aktyviomis sutartimis'
+      });
+    }
+
+    // Get dormitory_id before deleting
+    const roomResult = await query(
+      'SELECT dormitory_id, status FROM rooms WHERE id = $1',
+      [id]
+    );
+
+    if (roomResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Kambarys nerastas'
+      });
+    }
+
+    const { dormitory_id, status } = roomResult.rows[0];
 
     // Delete room
     await query('DELETE FROM rooms WHERE id = $1', [id]);
 
-    // Update dormitory rooms count
+    // Update dormitory counts
     await query(
-      'UPDATE dormitories SET total_rooms = total_rooms - 1, available_rooms = available_rooms - 1 WHERE id = $1',
-      [dormitory_id]
+      `UPDATE dormitories 
+       SET total_rooms = total_rooms - 1,
+           available_rooms = CASE 
+             WHEN $2 = 'AVAILABLE' THEN available_rooms - 1 
+             ELSE available_rooms 
+           END
+       WHERE id = $1`,
+      [dormitory_id, status]
     );
 
     res.json({
       success: true,
-      message: 'Kambarys sėkmingai ištrintas'
+      message: 'Kambarys ištrintas'
     });
   } catch (error) {
     console.error('Delete room error:', error);
     res.status(500).json({
       success: false,
-      message: 'Serverio klaida trinant kambarį'
+      message: 'Serverio klaida'
     });
   }
 };
 
-// @desc    Get dormitories
+// @desc    Get dormitories list with counts
 // @route   GET /api/rooms/dormitories
 // @access  Public
 export const getDormitories = async (req, res) => {
   try {
     const result = await query(
-      `SELECT d.*, ci.phone, ci.email, ci.address,
-              u.first_name as admin_first_name, u.last_name as admin_last_name
-       FROM dormitories d
-       LEFT JOIN contact_information ci ON d.contact_id = ci.id
-       LEFT JOIN users u ON d.admin_id = u.id
-       ORDER BY d.name`
+      `SELECT 
+        d.*,
+        COUNT(r.id) as total_rooms,
+        SUM(CASE WHEN r.status = 'AVAILABLE' THEN 1 ELSE 0 END) as available_rooms_count,
+        SUM(r.capacity - COALESCE(r.occupied_beds, 0)) as total_available_beds
+      FROM dormitories d
+      LEFT JOIN rooms r ON r.dormitory_id = d.id
+      GROUP BY d.id
+      ORDER BY d.name`
     );
 
     res.json({
@@ -307,7 +397,7 @@ export const getDormitories = async (req, res) => {
     console.error('Get dormitories error:', error);
     res.status(500).json({
       success: false,
-      message: 'Serverio klaida gaunant bendrabučius'
+      message: 'Serverio klaida'
     });
   }
 };

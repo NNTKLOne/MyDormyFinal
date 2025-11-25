@@ -66,6 +66,21 @@ const seedDatabase = async () => {
 
     const roomIds = roomResult.rows.map(row => row.id);
 
+    const contractResult = await client.query(`
+      INSERT INTO contracts (student_id, room_id, contract_number, start_date, end_date, monthly_price, status, signed_at)
+      VALUES 
+        ($1, $2, 'CNT-0001', '2025-09-01', '2026-06-30', 150.00, 'ACTIVE', CURRENT_TIMESTAMP)
+      RETURNING id;
+    `, [userIds[2], roomIds[0]]);
+
+    // Atnaujinam kambario užimtumą
+    await client.query(`
+      UPDATE rooms
+      SET occupied_beds = occupied_beds + 1,
+          status = 'OCCUPIED'
+      WHERE id = $1
+    `, [roomIds[0]]);
+
     // Insert sample requests
     await client.query(`
       INSERT INTO requests (student_id, room_id, status, documents)

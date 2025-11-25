@@ -7,49 +7,39 @@ import {
   CardMedia,
   Typography,
   Button,
-  AppBar,
-  Toolbar,
   Box,
   Chip,
   TextField,
   MenuItem,
   CircularProgress,
-  Snackbar,
-  Alert,
   Dialog,
   DialogTitle,
   DialogContent,
-  DialogActions
+  DialogActions,
+  Alert
 } from '@mui/material';
-import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 
 function RoomsPage() {
   const [rooms, setRooms] = useState([]);
-  const [loading, setLoading] = useState(true);
   const [dormitories, setDormitories] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [filters, setFilters] = useState({
     dormitory_id: '',
     min_price: '',
     max_price: '',
-    status: 'AVAILABLE'
+    capacity: ''
   });
-  const [snackbar, setSnackbar] = useState({
+  const [bookingDialog, setBookingDialog] = useState({
     open: false,
-    message: '',
-    severity: 'success'
+    room: null,
+    inspection_date: '',
+    inspection_time: '14:00'
   });
-  const [reservationDialog, setReservationDialog] = useState({
-    open: false,
-    roomId: null,
-    roomNumber: '',
-    startDate: '',
-    endDate: ''
-  });
-  
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const [message, setMessage] = useState({ text: '', severity: 'info' });
+
+  const { user } = useAuth();
 
   useEffect(() => {
     fetchDormitories();
@@ -58,8 +48,8 @@ function RoomsPage() {
 
   const fetchDormitories = async () => {
     try {
-      const response = await axios.get('/api/rooms/dormitories');
-      setDormitories(response.data.data);
+      const res = await axios.get('/api/rooms/dormitories');
+      setDormitories(res.data.data);
     } catch (error) {
       console.error('Error fetching dormitories:', error);
     }
@@ -76,202 +66,214 @@ function RoomsPage() {
         }
       });
 
-      const response = await axios.get(`/api/rooms?${params.toString()}`);
-      setRooms(response.data.data);
+      const res = await axios.get(`/api/rooms?${params.toString()}`);
+      setRooms(res.data.data);
     } catch (error) {
       console.error('Error fetching rooms:', error);
+      setMessage({ text: 'Klaida įkeliant kambarius', severity: 'error' });
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOpenReservationDialog = (room) => {
+  const handleOpenBooking = (room) => {
     if (!user) {
-      setSnackbar({
-        open: true,
-        message: 'Prašome prisijungti norint rezervuoti kambarį',
+      setMessage({
+        text: 'Prašome prisijungti norint užsiregistruoti apžiūrai',
         severity: 'warning'
       });
-      navigate('/login');
       return;
     }
 
-    // Set default dates (current academic year)
-    const today = new Date();
-    const startDate = new Date(today.getFullYear(), 8, 1); // September 1st
-    const endDate = new Date(today.getFullYear() + 1, 5, 30); // June 30th next year
+    if (user.user_type !== 'STUDENT') {
+      setMessage({
+        text: 'Tik studentai gali registruotis apžiūrai',
+        severity: 'warning'
+      });
+      return;
+    }
 
-    setReservationDialog({
+    // Set minimum date to tomorrow
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    setBookingDialog({
       open: true,
-      roomId: room.id,
-      roomNumber: room.room_number,
-      startDate: startDate.toISOString().split('T')[0],
-      endDate: endDate.toISOString().split('T')[0]
+      room: room,
+      inspection_date: tomorrow.toISOString().split('T')[0],
+      inspection_time: '14:00'
     });
   };
 
-  const handleCloseReservationDialog = () => {
-    setReservationDialog({
+  const handleCloseBooking = () => {
+    setBookingDialog({
       open: false,
-      roomId: null,
-      roomNumber: '',
-      startDate: '',
-      endDate: ''
+      room: null,
+      inspection_date: '',
+      inspection_time: '14:00'
     });
   };
 
-  const handleConfirmReservation = async () => {
+  const handleConfirmBooking = async () => {
     try {
-      await axios.post('/api/reservations', {
-        room_id: reservationDialog.roomId,
-        start_date: reservationDialog.startDate,
-        end_date: reservationDialog.endDate
+      await axios.post('/api/inspections', {
+        room_id: bookingDialog.room.id,
+        inspection_date: bookingDialog.inspection_date,
+        inspection_time: bookingDialog.inspection_time + ':00'
       });
 
-      setSnackbar({
-        open: true,
-        message: `Kambarys ${reservationDialog.roomNumber} sėkmingai rezervuotas!`,
+      setMessage({
+        text: 'Apžiūros užklausa sėkmingai pateikta! Laukite budėtojo patvirtinimo.',
         severity: 'success'
       });
 
-      handleCloseReservationDialog();
-      
-      // Refresh rooms list
-      setTimeout(() => {
-        fetchRooms();
-      }, 1000);
+      handleCloseBooking();
+      fetchRooms(); // Refresh to show updated status
     } catch (error) {
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || 'Klaida rezervuojant kambarį',
+      setMessage({
+        text: error.response?.data?.message || 'Klaida pateikiant užklausą',
         severity: 'error'
       });
     }
   };
 
-  const handleCloseSnackbar = () => {
-    setSnackbar({ ...snackbar, open: false });
-  };
-
-  const handleLogout = () => {
-    logout();
-    navigate('/login');
-  };
-
-  const getStatusColor = (status) => {
-    switch (status) {
-      case 'AVAILABLE': return 'success';
-      case 'RESERVED': return 'warning';
-      case 'OCCUPIED': return 'error';
-      default: return 'default';
+  // Generate time slots
+  const timeSlots = [];
+  for (let hour = 9; hour <= 18; hour++) {
+    timeSlots.push(`${hour.toString().padStart(2, '0')}:00`);
+    if (hour < 18) {
+      timeSlots.push(`${hour.toString().padStart(2, '0')}:30`);
     }
+  }
+
+  // Get minimum date (tomorrow)
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const minDate = tomorrow.toISOString().split('T')[0];
+
+  const getStatusColor = (room) => {
+    const occupied = room.occupied_beds || 0;
+    const available = room.available_beds || 0;
+    
+    if (available === 0) return 'error';
+    if (room.status === 'RESERVED') return 'warning';
+    return 'success';
   };
 
-  const getStatusText = (status) => {
-    switch (status) {
-      case 'AVAILABLE': return 'Laisvas';
-      case 'RESERVED': return 'Rezervuotas';
-      case 'OCCUPIED': return 'Užimtas';
-      default: return status;
-    }
+  const getStatusText = (room) => {
+    const occupied = room.occupied_beds || 0;
+    const available = room.available_beds || 0;
+    
+    if (available === 0) return 'Rezervuota';
+    if (room.status === 'RESERVED') return `Rezervuota ${occupied}/${room.capacity}`;
+    return `${available} laisva`;
   };
 
   return (
-    <>
-      <AppBar position="static">
-        <Toolbar>
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            MyDormy - Kambarių paieška
-          </Typography>
-          {user && (
-            <>
-              <Typography sx={{ mr: 2 }}>
-                {user.first_name} {user.last_name}
-              </Typography>
-              <Button color="inherit" onClick={handleLogout}>
-                Atsijungti
-              </Button>
-            </>
-          )}
-        </Toolbar>
-      </AppBar>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
+      <Typography variant="h4" gutterBottom>
+        Kambarių paieška
+      </Typography>
 
-      <Container sx={{ mt: 4, mb: 4 }}>
-        {/* Filtrai */}
-        <Box sx={{ mb: 4 }}>
-          <Grid container spacing={2}>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                fullWidth
-                label="Bendrabutis"
-                value={filters.dormitory_id}
-                onChange={(e) => setFilters({ ...filters, dormitory_id: e.target.value })}
-              >
-                <MenuItem value="">Visi</MenuItem>
-                {dormitories.map((dorm) => (
-                  <MenuItem key={dorm.id} value={dorm.id}>
-                    {dorm.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                fullWidth
-                label="Min. kaina (€)"
-                type="number"
-                value={filters.min_price}
-                onChange={(e) => setFilters({ ...filters, min_price: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                fullWidth
-                label="Maks. kaina (€)"
-                type="number"
-                value={filters.max_price}
-                onChange={(e) => setFilters({ ...filters, max_price: e.target.value })}
-              />
-            </Grid>
-            <Grid item xs={12} md={3}>
-              <TextField
-                select
-                fullWidth
-                label="Būsena"
-                value={filters.status}
-                onChange={(e) => setFilters({ ...filters, status: e.target.value })}
-              >
-                <MenuItem value="">Visos</MenuItem>
-                <MenuItem value="AVAILABLE">Laisvi</MenuItem>
-                <MenuItem value="RESERVED">Rezervuoti</MenuItem>
-                <MenuItem value="OCCUPIED">Užimti</MenuItem>
-              </TextField>
-            </Grid>
+      {message.text && (
+        <Alert severity={message.severity} sx={{ mb: 3 }} onClose={() => setMessage({ text: '', severity: 'info' })}>
+          {message.text}
+        </Alert>
+      )}
+
+      {/* Filtrai */}
+      <Box sx={{ mb: 4 }}>
+        <Grid container spacing={2}>
+          <Grid item xs={12} md={3}>
+            <TextField
+              select
+              fullWidth
+              label="Bendrabutis"
+              value={filters.dormitory_id}
+              onChange={(e) => setFilters({ ...filters, dormitory_id: e.target.value })}
+            >
+              <MenuItem value="">Visi</MenuItem>
+              {dormitories.map((dorm) => (
+                <MenuItem key={dorm.id} value={dorm.id}>
+                  {dorm.name}
+                </MenuItem>
+              ))}
+            </TextField>
           </Grid>
-        </Box>
+          <Grid item xs={12} md={2}>
+            <TextField
+              fullWidth
+              label="Min. kaina (€)"
+              type="number"
+              value={filters.min_price}
+              onChange={(e) => setFilters({ ...filters, min_price: e.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              fullWidth
+              label="Maks. kaina (€)"
+              type="number"
+              value={filters.max_price}
+              onChange={(e) => setFilters({ ...filters, max_price: e.target.value })}
+            />
+          </Grid>
+          <Grid item xs={12} md={2}>
+            <TextField
+              select
+              fullWidth
+              label="Vietų skaičius"
+              value={filters.capacity}
+              onChange={(e) => setFilters({ ...filters, capacity: e.target.value })}
+            >
+              <MenuItem value="">Visi</MenuItem>
+              <MenuItem value="1">1 vieta</MenuItem>
+              <MenuItem value="2">2 vietos</MenuItem>
+              <MenuItem value="3">3 vietos</MenuItem>
+              <MenuItem value="4">4+ vietos</MenuItem>
+            </TextField>
+          </Grid>
+          <Grid item xs={12} md={3}>
+            <Button
+              variant="outlined"
+              fullWidth
+              onClick={() => setFilters({
+                dormitory_id: '',
+                min_price: '',
+                max_price: '',
+                capacity: ''
+              })}
+              sx={{ height: '56px' }}
+            >
+              Išvalyti filtrus
+            </Button>
+          </Grid>
+        </Grid>
+      </Box>
 
-        {/* Kambarių sąrašas */}
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {rooms.length === 0 ? (
-              <Grid item xs={12}>
-                <Typography align="center" color="text.secondary">
-                  Kambarių nerasta
-                </Typography>
-              </Grid>
-            ) : (
-              rooms.map((room) => (
-                <Grid item xs={12} sm={6} md={4} key={room.id}>
-                  <Card>
+      {/* Kambarių sąrašas */}
+      {loading ? (
+        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+          <CircularProgress />
+        </Box>
+      ) : (
+        <Grid container spacing={3}>
+          {rooms.length === 0 ? (
+            <Grid item xs={12}>
+              <Alert severity="info">Kambarių nerasta</Alert>
+            </Grid>
+          ) : (
+            rooms.map((room) => {
+              const occupied = room.occupied_beds || 0;
+              const available = room.available_beds || 0;
+              
+              return (
+                <Grid item xs={12} sm={6} md={4} lg={3} key={room.id}>
+                  <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
                     <CardMedia
                       component="div"
                       sx={{
-                        height: 180,
+                        height: 140,
                         bgcolor: 'grey.300',
                         display: 'flex',
                         alignItems: 'center',
@@ -282,14 +284,15 @@ function RoomsPage() {
                         {room.room_number}
                       </Typography>
                     </CardMedia>
-                    <CardContent>
+                    
+                    <CardContent sx={{ flexGrow: 1 }}>
                       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
                         <Typography variant="h6">
                           Kambarys {room.room_number}
                         </Typography>
                         <Chip 
-                          label={getStatusText(room.status)} 
-                          color={getStatusColor(room.status)} 
+                          label={getStatusText(room)} 
+                          color={getStatusColor(room)} 
                           size="small" 
                         />
                       </Box>
@@ -302,16 +305,24 @@ function RoomsPage() {
                         €{room.price}/mėn
                       </Typography>
                       
-                      <Typography variant="body2" sx={{ mt: 1 }}>
-                        🛏️ Vietų: {room.capacity}
-                      </Typography>
-                      
-                      <Typography variant="body2">
-                        🏢 Aukštas: {room.floor || 'N/A'}
-                      </Typography>
+                      <Box sx={{ mt: 2 }}>
+                        <Typography variant="body2">
+                          🛏️ Užimta: {occupied}/{room.capacity} vietų
+                        </Typography>
+                        
+                        <Typography variant="body2">
+                          🏢 Aukštas: {room.floor || 'N/A'}
+                        </Typography>
+
+                        {available > 0 && (
+                          <Typography variant="body2" sx={{ mt: 1, color: 'success.main', fontWeight: 'bold' }}>
+                            ✓ {available} {available === 1 ? 'laisva vieta' : 'laisvos vietos'}
+                          </Typography>
+                        )}
+                      </Box>
 
                       {room.amenities && room.amenities.length > 0 && (
-                        <Box sx={{ mt: 1 }}>
+                        <Box sx={{ mt: 2 }}>
                           {room.amenities.slice(0, 3).map((amenity, index) => (
                             <Chip 
                               key={index} 
@@ -327,72 +338,84 @@ function RoomsPage() {
                         variant="contained" 
                         fullWidth 
                         sx={{ mt: 2 }}
-                        disabled={room.status !== 'AVAILABLE'}
-                        onClick={() => handleOpenReservationDialog(room)}
+                        onClick={() => handleOpenBooking(room)}
+                        disabled={!user || user.user_type !== 'STUDENT' || available === 0}
                       >
-                        {room.status === 'AVAILABLE' ? 'Rezervuoti' : 'Nepasiekiamas'}
+                        {available === 0 ? 'Nėra vietų' : 'Užsiregistruoti apžiūrai'}
                       </Button>
                     </CardContent>
                   </Card>
                 </Grid>
-              ))
-            )}
-          </Grid>
-        )}
-      </Container>
+              );
+            })
+          )}
+        </Grid>
+      )}
 
-      {/* Rezervacijos dialogas */}
-      <Dialog open={reservationDialog.open} onClose={handleCloseReservationDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Rezervuoti kambarį {reservationDialog.roomNumber}</DialogTitle>
+      {/* Booking Dialog */}
+      <Dialog open={bookingDialog.open} onClose={handleCloseBooking} maxWidth="sm" fullWidth>
+        <DialogTitle>
+          Užsiregistruoti kambario apžiūrai
+        </DialogTitle>
         <DialogContent>
-          <Box sx={{ mt: 2 }}>
+          {bookingDialog.room && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Kambarys {bookingDialog.room.room_number}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {bookingDialog.room.dormitory_name}
+              </Typography>
+              <Typography variant="body2">
+                €{bookingDialog.room.price}/mėn | {bookingDialog.room.available_beds} laisva vieta
+              </Typography>
+            </Box>
+          )}
+
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
             <TextField
               fullWidth
-              label="Pradžios data"
+              required
               type="date"
-              value={reservationDialog.startDate}
-              onChange={(e) => setReservationDialog({ ...reservationDialog, startDate: e.target.value })}
+              label="Apžiūros data"
+              value={bookingDialog.inspection_date}
+              onChange={(e) => setBookingDialog({ ...bookingDialog, inspection_date: e.target.value })}
               InputLabelProps={{ shrink: true }}
-              sx={{ mb: 2 }}
+              inputProps={{ min: minDate }}
             />
+
             <TextField
+              select
               fullWidth
-              label="Pabaigos data"
-              type="date"
-              value={reservationDialog.endDate}
-              onChange={(e) => setReservationDialog({ ...reservationDialog, endDate: e.target.value })}
-              InputLabelProps={{ shrink: true }}
-            />
+              required
+              label="Apžiūros laikas"
+              value={bookingDialog.inspection_time}
+              onChange={(e) => setBookingDialog({ ...bookingDialog, inspection_time: e.target.value })}
+            >
+              {timeSlots.map((time) => (
+                <MenuItem key={time} value={time}>
+                  {time}
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Alert severity="info">
+              Po užsiregistravimo, budėtojas turi patvirtinti apžiūros laiką. Gausite pranešimą apie sprendimą.
+            </Alert>
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseReservationDialog}>Atšaukti</Button>
-          <Button 
-            onClick={handleConfirmReservation} 
+          <Button onClick={handleCloseBooking}>Atšaukti</Button>
+          <Button
+            onClick={handleConfirmBooking}
             variant="contained"
-            disabled={!reservationDialog.startDate || !reservationDialog.endDate}
+            disabled={!bookingDialog.inspection_date || !bookingDialog.inspection_time}
           >
-            Patvirtinti rezervaciją
+            Patvirtinti
           </Button>
         </DialogActions>
       </Dialog>
-
-      {/* Snackbar pranešimams */}
-      <Snackbar
-        open={snackbar.open}
-        autoHideDuration={4000}
-        onClose={handleCloseSnackbar}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert 
-          onClose={handleCloseSnackbar} 
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
-          {snackbar.message}
-        </Alert>
-      </Snackbar>
-    </>
+    </Container>
   );
 }
 

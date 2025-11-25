@@ -10,7 +10,6 @@ import {
   TableHead,
   TableRow,
   Paper,
-  Chip,
   Button,
   CircularProgress,
   Dialog,
@@ -18,10 +17,10 @@ import {
   DialogContent,
   DialogActions,
   TextField,
-  Alert
+  Alert,
+  Chip
 } from '@mui/material';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext';
 
 function SupervisorDashboard() {
   const [inspections, setInspections] = useState([]);
@@ -33,8 +32,6 @@ function SupervisorDashboard() {
     action: '',
     notes: ''
   });
-
-  const { user } = useAuth();
 
   useEffect(() => {
     fetchInspections();
@@ -53,7 +50,7 @@ function SupervisorDashboard() {
     }
   };
 
-  const handleOpenReviewDialog = (inspectionId, action) => {
+  const handleOpenReview = (inspectionId, action) => {
     setReviewDialog({
       open: true,
       inspectionId,
@@ -62,7 +59,7 @@ function SupervisorDashboard() {
     });
   };
 
-  const handleCloseReviewDialog = () => {
+  const handleCloseReview = () => {
     setReviewDialog({
       open: false,
       inspectionId: null,
@@ -71,7 +68,7 @@ function SupervisorDashboard() {
     });
   };
 
-  const handleReviewInspection = async () => {
+  const handleReview = async () => {
     try {
       await axios.put(`/api/inspections/${reviewDialog.inspectionId}/status`, {
         status: reviewDialog.action,
@@ -83,25 +80,21 @@ function SupervisorDashboard() {
         severity: 'success'
       });
 
-      handleCloseReviewDialog();
+      handleCloseReview();
       fetchInspections();
     } catch (error) {
       setMessage({ text: 'Klaida apdorojant apžiūrą', severity: 'error' });
     }
   };
 
-  const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString('lt-LT');
-  };
-
-  const formatTime = (timeString) => {
-    return timeString.substring(0, 5); // HH:MM
-  };
-
   return (
-    <Container maxWidth="xl" sx={{ mt: 4, mb: 4 }}>
+    <Container maxWidth="xl" sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
-        Budėtojo skydelis - Apžiūros
+        Apžiūrų užklausos
+      </Typography>
+
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+        Studentų pateiktos apžiūrų užklausos. Patvirtinkite arba atmeskite kiekvieną užklausą.
       </Typography>
 
       {message.text && (
@@ -123,9 +116,9 @@ function SupervisorDashboard() {
                 <TableCell>Laikas</TableCell>
                 <TableCell>Kambarys</TableCell>
                 <TableCell>Bendrabutis</TableCell>
+                <TableCell>Vietos</TableCell>
                 <TableCell>Studentas</TableCell>
-                <TableCell>El. paštas</TableCell>
-                <TableCell>Būsena</TableCell>
+                <TableCell>Telefonas</TableCell>
                 <TableCell>Veiksmai</TableCell>
               </TableRow>
             </TableHead>
@@ -133,46 +126,54 @@ function SupervisorDashboard() {
               {inspections.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={8} align="center">
-                    Apžiūrų nėra
+                    Laukiančių užklausų nėra
                   </TableCell>
                 </TableRow>
               ) : (
                 inspections.map((inspection) => (
                   <TableRow key={inspection.id}>
-                    <TableCell>{formatDate(inspection.inspection_date)}</TableCell>
-                    <TableCell>{formatTime(inspection.inspection_time)}</TableCell>
-                    <TableCell>{inspection.room_number}</TableCell>
-                    <TableCell>{inspection.dormitory_name}</TableCell>
-                    <TableCell>{inspection.first_name} {inspection.last_name}</TableCell>
-                    <TableCell>{inspection.email}</TableCell>
+                    <TableCell>{new Date(inspection.inspection_date).toLocaleDateString('lt-LT')}</TableCell>
+                    <TableCell>{inspection.inspection_time.substring(0, 5)}</TableCell>
                     <TableCell>
-                      <Chip
-                        label={inspection.status === 'PENDING' ? 'Laukia' : inspection.status}
-                        color={inspection.status === 'PENDING' ? 'warning' : 'default'}
-                        size="small"
+                      {inspection.room_number}
+                      <Chip 
+                        label={`${inspection.available_beds} laisva`} 
+                        size="small" 
+                        color="success"
+                        sx={{ ml: 1 }}
                       />
                     </TableCell>
+                    <TableCell>{inspection.dormitory_name}</TableCell>
                     <TableCell>
-                      {inspection.status === 'PENDING' && (
-                        <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="success"
-                            onClick={() => handleOpenReviewDialog(inspection.id, 'APPROVED')}
-                          >
-                            Patvirtinti
-                          </Button>
-                          <Button
-                            size="small"
-                            variant="contained"
-                            color="error"
-                            onClick={() => handleOpenReviewDialog(inspection.id, 'REJECTED')}
-                          >
-                            Atmesti
-                          </Button>
-                        </Box>
-                      )}
+                      {inspection.occupied_beds || 0}/{inspection.capacity}
+                    </TableCell>
+                    <TableCell>
+                      {inspection.first_name} {inspection.last_name}
+                      <br />
+                      <Typography variant="caption" color="text.secondary">
+                        {inspection.email}
+                      </Typography>
+                    </TableCell>
+                    <TableCell>{inspection.phone || '-'}</TableCell>
+                    <TableCell>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="success"
+                          onClick={() => handleOpenReview(inspection.id, 'APPROVED')}
+                        >
+                          Patvirtinti
+                        </Button>
+                        <Button
+                          size="small"
+                          variant="contained"
+                          color="error"
+                          onClick={() => handleOpenReview(inspection.id, 'REJECTED')}
+                        >
+                          Atmesti
+                        </Button>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 ))
@@ -183,7 +184,7 @@ function SupervisorDashboard() {
       )}
 
       {/* Review Dialog */}
-      <Dialog open={reviewDialog.open} onClose={handleCloseReviewDialog} maxWidth="sm" fullWidth>
+      <Dialog open={reviewDialog.open} onClose={handleCloseReview} maxWidth="sm" fullWidth>
         <DialogTitle>
           {reviewDialog.action === 'APPROVED' ? 'Patvirtinti apžiūrą' : 'Atmesti apžiūrą'}
         </DialogTitle>
@@ -199,9 +200,9 @@ function SupervisorDashboard() {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleCloseReviewDialog}>Atšaukti</Button>
+          <Button onClick={handleCloseReview}>Atšaukti</Button>
           <Button
-            onClick={handleReviewInspection}
+            onClick={handleReview}
             variant="contained"
             color={reviewDialog.action === 'APPROVED' ? 'success' : 'error'}
           >
