@@ -311,12 +311,18 @@ function DormAdminDashboard() {
             </Grid>
             <Grid item xs={12}>
               <TextField
+                select
                 fullWidth
+                required
                 label="Kambario tipas"
                 value={roomDialog.room_type}
+                sx={{ minWidth: 200 }}
                 onChange={(e) => setRoomDialog({ ...roomDialog, room_type: e.target.value })}
-                placeholder="Pvz: Vienvietis, Dvivietis, Trivietis"
-              />
+              >
+              <MenuItem value="Vienvietis">Vienvietis</MenuItem>
+              <MenuItem value="Dvivietis">Dvivietis</MenuItem>
+              <MenuItem value="Trivietis">Trivietis</MenuItem>
+              </TextField>
             </Grid>
             <Grid item xs={12}>
               <TextField
