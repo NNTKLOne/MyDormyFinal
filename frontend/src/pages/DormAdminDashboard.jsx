@@ -260,6 +260,7 @@ function DormAdminDashboard() {
                 required
                 label="Bendrabutis"
                 value={roomDialog.dormitory_id}
+                sx={{ minWidth: 200 }}
                 onChange={(e) => setRoomDialog({ ...roomDialog, dormitory_id: e.target.value })}
               >
                 {dormitories.map((dorm) => (
@@ -281,6 +282,7 @@ function DormAdminDashboard() {
             <Grid item xs={12} md={4}>
               <TextField
                 fullWidth
+                required
                 label="Aukštas"
                 type="number"
                 value={roomDialog.floor}

@@ -73,7 +73,15 @@ const createTables = async () => {
     await client.query(`
       CREATE TABLE dormitories (
         id SERIAL PRIMARY KEY,
-        name VARCHAR(255) NOT NULL,
+        name VARCHAR(255) NOT NULL CHECK (
+          name IN (
+            'VGTU Bendrabutis Nr. 1',
+            'VGTU Bendrabutis Nr. 2',
+            'VGTU Bendrabutis Nr. 3',
+            'VGTU Bendrabutis Nr. 4',
+            'VGTU Bendrabutis Nr. 5'
+          )
+        ),
         address TEXT NOT NULL,
         contact_id INTEGER REFERENCES contact_information(id) ON DELETE SET NULL,
         admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
@@ -84,6 +92,8 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+
 
     // Create rooms table
     await client.query(`
