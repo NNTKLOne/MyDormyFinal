@@ -16,7 +16,6 @@ export const login = async (req, res) => {
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       return res.status(400).json({
         success: false,
@@ -24,13 +23,12 @@ export const login = async (req, res) => {
       });
     }
 
-    // Check if user exists
     const result = await query(
-      `SELECT u.*, ci.phone, ci.address 
+        `SELECT u.*, ci.phone, ci.address 
        FROM users u 
        LEFT JOIN contact_information ci ON u.contact_id = ci.id 
        WHERE u.email = $1`,
-      [email]
+        [email]
     );
 
     if (result.rows.length === 0) {
@@ -42,7 +40,6 @@ export const login = async (req, res) => {
 
     const user = result.rows[0];
 
-    // Check if user is active
     if (!user.is_active) {
       return res.status(401).json({
         success: false,
@@ -50,7 +47,6 @@ export const login = async (req, res) => {
       });
     }
 
-    // Check password
     const isMatch = await bcrypt.compare(password, user.password_hash);
 
     if (!isMatch) {
@@ -60,10 +56,8 @@ export const login = async (req, res) => {
       });
     }
 
-    // Generate token
     const token = generateToken(user.id);
 
-    // Remove password from response
     delete user.password_hash;
 
     res.json({
@@ -84,19 +78,27 @@ export const login = async (req, res) => {
   }
 };
 
-// @desc    Get current user
-// @route   GET /api/auth/me
-// @access  Private
+// @desc Get current user
 export const getMe = async (req, res) => {
   try {
     const result = await query(
-      `SELECT u.id, u.first_name, u.last_name, u.email, u.user_type, 
-              u.faculty, u.study_program, u.student_id, u.is_active,
-              ci.phone, ci.address
-       FROM users u 
-       LEFT JOIN contact_information ci ON u.contact_id = ci.id 
+        `SELECT
+         u.id,
+         u.first_name,
+         u.last_name,
+         u.email,
+         u.user_type,
+         u.faculty,
+         u.study_program,
+         u.student_id,
+         u.is_active,
+         u.must_change_password,
+         ci.phone,
+         ci.address
+       FROM users u
+       LEFT JOIN contact_information ci ON u.contact_id = ci.id
        WHERE u.id = $1`,
-      [req.user.id]
+        [req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -106,27 +108,42 @@ export const getMe = async (req, res) => {
       });
     }
 
+    const user = result.rows[0];
+
+    let dormitories = [];
+    if (user.user_type === "DORMITORY_ADMIN") {
+      const dormRes = await query(
+          `SELECT id, name, address
+         FROM dormitories
+         WHERE admin_id = $1`,
+          [user.id]
+      );
+
+      dormitories = dormRes.rows;
+    }
+
     res.json({
       success: true,
-      data: result.rows[0]
+      data: {
+        ...user,
+        dormitories
+      }
     });
+
   } catch (error) {
     console.error('Get me error:', error);
     res.status(500).json({
       success: false,
-      message: 'Serverio klaida'
+      message: 'Server error'
     });
   }
 };
 
-// @desc    Change password
-// @route   PUT /api/auth/change-password
-// @access  Private
+// @desc Change password
 export const changePassword = async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
 
-    // Validation
     if (!currentPassword || !newPassword) {
       return res.status(400).json({
         success: false,
@@ -141,15 +158,13 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    // Get user with password
     const result = await query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [req.user.id]
+        'SELECT password_hash FROM users WHERE id = $1',
+        [req.user.id]
     );
 
     const user = result.rows[0];
 
-    // Check current password
     const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
 
     if (!isMatch) {
@@ -159,13 +174,11 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
-      [hashedPassword, req.user.id]
+        'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
+        [hashedPassword, req.user.id]
     );
 
     res.json({
@@ -181,9 +194,7 @@ export const changePassword = async (req, res) => {
   }
 };
 
-// @desc    Logout user (client-side token deletion)
-// @route   POST /api/auth/logout
-// @access  Private
+// @desc Logout
 export const logout = async (req, res) => {
   res.json({
     success: true,

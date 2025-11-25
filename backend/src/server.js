@@ -1,34 +1,39 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
+
 import authRoutes from './routes/authRoutes.js';
 import roomRoutes from './routes/roomRoutes.js';
 import reservationRoutes from './routes/reservationRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+
+import { authMiddleware } from './middleware/auth.js';
+import { forcePasswordChange } from './middleware/forcePasswordChange.js';
+
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import pool from './config/database.js';
 
-
-// Load environment variables
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
+// CORS
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3001',
   credentials: true
 }));
+
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Request logging middleware
+// Logging
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} - ${req.method} ${req.path}`);
   next();
 });
 
-// Health check route
+// Health check
 app.get('/health', (req, res) => {
   res.json({
     success: true,
@@ -37,19 +42,56 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API Routes
+/*
+===========================================================
+   GLOBAL AUTH + PASSWORD CHANGE ENFORCEMENT
+===========================================================
+*/
+
+/// Leisti tik login
+const isPublicAuthRoute = (req) =>
+    req.path.startsWith("/api/auth/login");
+
+// Global middleware
+app.use((req, res, next) => {
+
+  if (isPublicAuthRoute(req)) return next();
+
+  // Tikrinam token
+  authMiddleware(req, res, () => {
+
+    // Tikrinam must-change-password
+    forcePasswordChange(req, res, next);
+  });
+});
+
+
+/*
+===========================================================
+   API ROUTES (po global auth filterio)
+===========================================================
+*/
+
 app.use('/api/auth', authRoutes);
 app.use('/api/rooms', roomRoutes);
 app.use('/api/reservations', reservationRoutes);
+app.use('/api/admin', adminRoutes);
 
-// Error handling
+/*
+===========================================================
+   ERROR HANDLING
+===========================================================
+*/
 app.use(notFound);
 app.use(errorHandler);
 
-// Start server
+/*
+===========================================================
+   START SERVER
+===========================================================
+*/
 const startServer = async () => {
   try {
-    // Test database connection
     await pool.query('SELECT NOW()');
     console.log('✅ Database connected successfully');
 
@@ -68,18 +110,5 @@ const startServer = async () => {
 };
 
 startServer();
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  console.log('SIGTERM signal received: closing HTTP server');
-  await pool.end();
-  process.exit(0);
-});
-
-process.on('SIGINT', async () => {
-  console.log('SIGINT signal received: closing HTTP server');
-  await pool.end();
-  process.exit(0);
-});
 
 export default app;

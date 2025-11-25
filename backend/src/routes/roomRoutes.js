@@ -2,23 +2,48 @@ import express from 'express';
 import {
   getRooms,
   getRoom,
-  createRoom,
-  updateRoom,
-  deleteRoom,
   getDormitories
 } from '../controllers/roomController.js';
+
 import { authMiddleware, authorize } from '../middleware/auth.js';
+import { forcePasswordChange } from '../middleware/forcePasswordChange.js';
 
 const router = express.Router();
 
-// Public routes
-router.get('/', getRooms);
-router.get('/dormitories', getDormitories);
-router.get('/:id', getRoom);
+/*
+  ================================
+     PROTECTED ROUTES (GET)
+     Must be logged in + must NOT
+     need password change
+  ================================
+*/
 
-// Protected routes - Dormitory Admin only
-router.post('/', authMiddleware, authorize('DORMITORY_ADMIN', 'UNIVERSITY_ADMIN'), createRoom);
-router.put('/:id', authMiddleware, authorize('DORMITORY_ADMIN', 'UNIVERSITY_ADMIN'), updateRoom);
-router.delete('/:id', authMiddleware, authorize('DORMITORY_ADMIN', 'UNIVERSITY_ADMIN'), deleteRoom);
+router.get('/',
+    authMiddleware,
+    forcePasswordChange,
+    getRooms
+);
+
+router.get('/dormitories',
+    authMiddleware,
+    forcePasswordChange,
+    getDormitories
+);
+
+router.get('/:id',
+    authMiddleware,
+    forcePasswordChange,
+    getRoom
+);
+
+/*
+  ================================
+     ADMIN ROUTES
+     Must be logged in + must NOT
+     need password change + role OK
+  ================================
+*/
+
+
 
 export default router;

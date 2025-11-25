@@ -21,6 +21,7 @@ export const AuthProvider = ({ children }) => {
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
       fetchUser();
     } else {
+      delete axios.defaults.headers.common['Authorization'];
       setLoading(false);
     }
   }, [token]);
@@ -28,7 +29,13 @@ export const AuthProvider = ({ children }) => {
   const fetchUser = async () => {
     try {
       const response = await axios.get('/api/auth/me');
-      setUser(response.data.data);
+      const u = response.data.data;
+
+      setUser({
+        ...u,
+        must_change_password: u.must_change_password
+      });
+
     } catch (error) {
       console.error('Failed to fetch user:', error);
       logout();
@@ -37,21 +44,37 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
+
   const login = async (email, password) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
-      const { token, user } = response.data.data;
-      
+
+      const token = response.data.data.token;
+      const user  = response.data.data.user;
+      const mustChangePassword = response.data.data.mustChangePassword;
+
+      // Įrašome token LOCAL STORAGE
       localStorage.setItem('token', token);
       setToken(token);
-      setUser(user);
+
+      // Sustatome user state su must_change_password flagu
+      setUser({
+        ...user,
+        must_change_password: mustChangePassword,
+      });
+
+      // Pridedame Authorization header
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      return { success: true };
+
+      return {
+        success: true,
+        mustChangePassword
+      };
+
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Prisijungimo klaida' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Prisijungimo klaida'
       };
     }
   };
