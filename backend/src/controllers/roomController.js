@@ -1,5 +1,67 @@
 import { query } from '../config/database.js';
 
+/**
+ * Pagal realius duomenis (sutartys + apžiūros) perskaičiuoja kambario būseną
+ * ir atnaujina rooms.status bei rooms.occupied_beds.
+ *
+ * Taisyklės:
+ *  - OCCUPIED: visos vietos užimtos pagal aktyvias/signed sutartis
+ *  - RESERVED: yra laisvų vietų, bet visos jos užrezervuotos apžiūromis
+ *  - AVAILABLE: dar yra visiškai laisvų vietų, kurioms nėra rezervacijų
+ */
+export const recalculateRoomStatus = async (roomId) => {
+  const statsRes = await query(
+    `
+    SELECT
+      r.id,
+      r.capacity,
+      COALESCE(ct.current_residents, 0) AS current_residents,
+      COALESCE(ins.reserved_slots, 0) AS reserved_slots
+    FROM rooms r
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) AS current_residents
+      FROM contracts c
+      WHERE c.room_id = r.id
+        AND c.status IN ('ACTIVE', 'SIGNED')
+    ) ct ON TRUE
+    LEFT JOIN LATERAL (
+      SELECT COUNT(*) AS reserved_slots
+      FROM inspections i
+      WHERE i.room_id = r.id
+        AND i.status IN ('PENDING', 'APPROVED')
+    ) ins ON TRUE
+    WHERE r.id = $1
+    `,
+    [roomId]
+  );
+
+  if (statsRes.rows.length === 0) return null;
+
+  const { capacity, current_residents, reserved_slots } = statsRes.rows[0];
+
+  const freeCapacity = Math.max(capacity - current_residents, 0);
+  const availableForNew = Math.max(freeCapacity - reserved_slots, 0);
+
+  let status = 'AVAILABLE';
+  if (current_residents >= capacity) {
+    status = 'OCCUPIED';
+  } else if (freeCapacity > 0 && availableForNew === 0) {
+    status = 'RESERVED';
+  }
+
+  await query(
+    `
+    UPDATE rooms
+    SET status = $1,
+        occupied_beds = $2
+    WHERE id = $3
+    `,
+    [status, current_residents, roomId]
+  );
+
+  return { status, occupied_beds: current_residents, freeCapacity, reserved_slots, availableForNew };
+};
+
 // @desc    Get all rooms with filters
 // @route   GET /api/rooms
 // @access  Public
@@ -10,45 +72,49 @@ export const getRooms = async (req, res) => {
     const normalizedStatus = status ? status.toUpperCase() : null;
 
     let queryText = `
-      SELECT 
-        r.*,
-        d.name as dormitory_name,
-        d.address as dormitory_address,
-        -- rezervuotos vietos (apžiūros)
-        COALESCE((
-          SELECT COUNT(*) 
-          FROM inspections i
-          WHERE i.room_id = r.id 
-            AND i.status IN ('PENDING', 'APPROVED')
-        ), 0) as reserved_slots,
-        -- realiai laisvos vietos: capacity - užimtos - rezervuotos
+      SELECT
+        r.id,
+        r.dormitory_id,
+        r.room_number,
+        r.floor,
+        r.capacity,
+        r.price,
+        r.room_type,
+        r.status,
+        r.description,
+        r.amenities,
+        r.images,
+        d.name AS dormitory_name,
+        d.address AS dormitory_address,
+        COALESCE(r.occupied_beds, 0) AS occupied_beds,
+        COALESCE(ins.reserved_slots, 0) AS reserved_slots,
+        GREATEST(r.capacity - COALESCE(r.occupied_beds, 0), 0) AS total_free_beds,
         GREATEST(
-          r.capacity 
-          - COALESCE(r.occupied_beds, 0)
-          - COALESCE((
-            SELECT COUNT(*) 
-            FROM inspections i
-            WHERE i.room_id = r.id 
-              AND i.status IN ('PENDING', 'APPROVED')
-          ), 0),
+          (r.capacity - COALESCE(r.occupied_beds, 0)) - COALESCE(ins.reserved_slots, 0),
           0
-        ) as available_beds
+        ) AS available_beds
       FROM rooms r
       JOIN dormitories d ON r.dormitory_id = d.id
-      WHERE 1=1
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS reserved_slots
+        FROM inspections i
+        WHERE i.room_id = r.id
+          AND i.status IN ('PENDING', 'APPROVED')
+      ) ins ON TRUE
+      WHERE 1 = 1
     `;
 
     const params = [];
     let paramCount = 1;
 
-    // // Only show rooms with at least 1 available bed (unless admin viewing all)
-    // if (!status) {
-    //   queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
-    // }
-
-      // Tik jei status NEPATEIKTAS - rodom tik kambarius su laisvom vietom
+    // Jei status nėra nurodytas – rodom tik kambarius, kur dar galima registruotis (yra laisvų vietų)
     if (!normalizedStatus) {
-      queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
+      queryText += `
+        AND GREATEST(
+              (r.capacity - COALESCE(r.occupied_beds, 0)) - COALESCE(ins.reserved_slots, 0),
+              0
+            ) > 0
+      `;
     }
 
     if (dormitory_id) {
@@ -81,13 +147,7 @@ export const getRooms = async (req, res) => {
       paramCount++;
     }
 
-    // if (status) {
-    //   queryText += ` AND r.status = $${paramCount}`;
-    //   params.push(status);
-    //   paramCount++;
-    // }
-
-        // Čia svarbiausia vieta: status filtras TIK jei ne 'ALL'
+    // Status filtras tik jei ne 'ALL'
     if (normalizedStatus && normalizedStatus !== 'ALL') {
       queryText += ` AND r.status = $${paramCount}`;
       params.push(normalizedStatus);
@@ -112,6 +172,7 @@ export const getRooms = async (req, res) => {
   }
 };
 
+
 // @desc    Get single room
 // @route   GET /api/rooms/:id
 // @access  Public
@@ -120,11 +181,28 @@ export const getRoom = async (req, res) => {
     const { id } = req.params;
 
     const result = await query(
-      `SELECT 
-        r.*,
-        d.name as dormitory_name,
-        d.address as dormitory_address,
-        (r.capacity - COALESCE(r.occupied_beds, 0)) as available_beds,
+      `
+      SELECT
+        r.id,
+        r.dormitory_id,
+        r.room_number,
+        r.floor,
+        r.capacity,
+        r.price,
+        r.room_type,
+        r.status,
+        r.description,
+        r.amenities,
+        r.images,
+        d.name AS dormitory_name,
+        d.address AS dormitory_address,
+        COALESCE(ct.current_residents, 0) AS occupied_beds,
+        COALESCE(ins.reserved_slots, 0) AS reserved_slots,
+        GREATEST(r.capacity - COALESCE(ct.current_residents, 0), 0) AS total_free_beds,
+        GREATEST(
+          (r.capacity - COALESCE(ct.current_residents, 0)) - COALESCE(ins.reserved_slots, 0),
+          0
+        ) AS available_beds,
         json_agg(
           json_build_object(
             'id', u.id,
@@ -132,13 +210,30 @@ export const getRoom = async (req, res) => {
             'last_name', u.last_name,
             'email', u.email
           )
-        ) FILTER (WHERE u.id IS NOT NULL) as residents
+        ) FILTER (WHERE u.id IS NOT NULL) AS residents
       FROM rooms r
       JOIN dormitories d ON r.dormitory_id = d.id
-      LEFT JOIN contracts c ON c.room_id = r.id AND c.status IN ('ACTIVE', 'SIGNED')
-      LEFT JOIN users u ON u.id = c.student_id
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS current_residents
+        FROM contracts c
+        WHERE c.room_id = r.id
+          AND c.status IN ('ACTIVE', 'SIGNED')
+      ) ct ON TRUE
+      LEFT JOIN LATERAL (
+        SELECT COUNT(*) AS reserved_slots
+        FROM inspections i
+        WHERE i.room_id = r.id
+          AND i.status IN ('PENDING', 'APPROVED')
+      ) ins ON TRUE
+      LEFT JOIN contracts c2 ON c2.room_id = r.id AND c2.status IN ('ACTIVE', 'SIGNED')
+      LEFT JOIN users u ON u.id = c2.student_id
       WHERE r.id = $1
-      GROUP BY r.id, d.id`,
+      GROUP BY
+        r.id,
+        d.id,
+        ct.current_residents,
+        ins.reserved_slots
+      `,
       [id]
     );
 
@@ -199,7 +294,6 @@ export const createRoom = async (req, res) => {
       });
     }
 
-    // Create room with all fields
     const result = await query(
       `INSERT INTO rooms 
        (dormitory_id, room_number, floor, capacity, occupied_beds, price, 
@@ -293,6 +387,9 @@ export const updateRoom = async (req, res) => {
         message: 'Kambarys nerastas'
       });
     }
+
+    // po redagavimo perskaičiuojam status pagal realius duomenis
+    await recalculateRoomStatus(id);
 
     res.json({
       success: true,
