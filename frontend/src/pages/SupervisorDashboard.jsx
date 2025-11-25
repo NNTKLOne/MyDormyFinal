@@ -87,6 +87,18 @@ function SupervisorDashboard() {
     }
   };
 
+  const getStatusChip = (status) => {
+    const map = {
+      'PENDING':   { label: 'Laukia patvirtinimo', color: 'warning' },
+      'APPROVED':  { label: 'Patvirtinta',         color: 'success' },
+      'REJECTED':  { label: 'Atmesta',             color: 'error' },
+      'CANCELED':  { label: 'Atšaukta',            color: 'default' }
+    };
+
+    const { label, color } = map[status] || { label: status, color: 'default' };
+    return <Chip label={label} color={color} size="small" />;
+  };
+
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
       <Typography variant="h4" gutterBottom>
@@ -119,6 +131,7 @@ function SupervisorDashboard() {
                 <TableCell>Vietos</TableCell>
                 <TableCell>Studentas</TableCell>
                 <TableCell>Telefonas</TableCell>
+                <TableCell>Būsena</TableCell>
                 <TableCell>Veiksmai</TableCell>
               </TableRow>
             </TableHead>
@@ -155,25 +168,38 @@ function SupervisorDashboard() {
                       </Typography>
                     </TableCell>
                     <TableCell>{inspection.phone || '-'}</TableCell>
+                    
+                    {/* Būsena */}
                     <TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="success"
-                          onClick={() => handleOpenReview(inspection.id, 'APPROVED')}
-                        >
-                          Patvirtinti
-                        </Button>
-                        <Button
-                          size="small"
-                          variant="contained"
-                          color="error"
-                          onClick={() => handleOpenReview(inspection.id, 'REJECTED')}
-                        >
-                          Atmesti
-                        </Button>
-                      </Box>
+                      {getStatusChip(inspection.status)}
+                    </TableCell>
+
+                    {/* Veiksmai – tik jei PENDING */}
+                    <TableCell>
+                      {inspection.status === 'PENDING' ? (
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="success"
+                            onClick={() => handleOpenReview(inspection.id, 'APPROVED')}
+                          >
+                            Patvirtinti
+                          </Button>
+                          <Button
+                            size="small"
+                            variant="contained"
+                            color="error"
+                            onClick={() => handleOpenReview(inspection.id, 'REJECTED')}
+                          >
+                            Atmesti
+                          </Button>
+                        </Box>
+                      ) : (
+                        <Typography variant="caption" color="text.secondary">
+                          Veiksmų nėra
+                        </Typography>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))

@@ -151,22 +151,31 @@ function RoomsPage() {
   tomorrow.setDate(tomorrow.getDate() + 1);
   const minDate = tomorrow.toISOString().split('T')[0];
 
+    // pagal vieną vietą apsiskaičiuojam visus skaičius
+  const getRoomCounts = (room) => {
+    const occupied = room.occupied_beds || 0;                // kiek gyventojų (sutartys)
+    const totalFree = Math.max(room.capacity - occupied, 0); // iš viso laisvų lovų
+    const reserved = room.reserved_slots || 0;               // kiek iš tų laisvų jau rezervuota apžiūromis
+    const available = Math.max(totalFree - reserved, 0);     // kiek dar galima rezervuoti (mygtukui)
+
+    return { occupied, totalFree, reserved, available };
+  };
+
   const getStatusColor = (room) => {
-    const occupied = room.occupied_beds || 0;
-    const available = room.available_beds || 0;
-    
-    if (available === 0) return 'error';
-    if (room.status === 'RESERVED') return 'warning';
+    const { available, reserved, totalFree } = getRoomCounts(room);
+
+    if (totalFree === 0) return 'error';            // kambarys pilnas (gyventojai)
+    if (available === 0 && totalFree > 0) return 'error'; // visos laisvos vietos užrezervuotos
+    if (reserved > 0) return 'warning';            // yra rezervacijų, bet dar yra laisvų
     return 'success';
   };
 
   const getStatusText = (room) => {
-    const occupied = room.occupied_beds || 0;
-    const available = room.available_beds || 0;
-    
-    if (available === 0) return 'Rezervuota';
-    if (room.status === 'RESERVED') return `Rezervuota ${occupied}/${room.capacity}`;
-    return `${available} laisva`;
+    const { reserved, totalFree } = getRoomCounts(room);
+
+    if (totalFree === 0) return 'Pilnas';
+    // Visada rodom, kiek iš laisvų vietų yra rezervuota
+    return `Rezervuota ${reserved}/${totalFree}`;
   };
 
   return (
@@ -182,7 +191,7 @@ function RoomsPage() {
       )}
 
       {/* Filtrai */}
-      <Box sx={{ mb: 4 }}>
+      <Box sx={{ mb: 3 }}>
         <Grid container spacing={2}>
           <Grid item xs={12} md={3}>
             <TextField
@@ -192,7 +201,7 @@ function RoomsPage() {
               value={filters.dormitory_id}
               onChange={(e) => setFilters({ ...filters, dormitory_id: e.target.value })}
             >
-              <MenuItem value="">Visi</MenuItem>
+              <MenuItem value="">Visi bendrabučiai</MenuItem>
               {dormitories.map((dorm) => (
                 <MenuItem key={dorm.id} value={dorm.id}>
                   {dorm.name}
@@ -200,43 +209,41 @@ function RoomsPage() {
               ))}
             </TextField>
           </Grid>
-          <Grid item xs={12} md={2}>
+
+          <Grid item xs={6} md={2}>
             <TextField
               fullWidth
-              label="Min. kaina (€)"
+              label="Min kaina"
               type="number"
               value={filters.min_price}
               onChange={(e) => setFilters({ ...filters, min_price: e.target.value })}
             />
           </Grid>
-          <Grid item xs={12} md={2}>
+
+          <Grid item xs={6} md={2}>
             <TextField
               fullWidth
-              label="Maks. kaina (€)"
+              label="Max kaina"
               type="number"
               value={filters.max_price}
               onChange={(e) => setFilters({ ...filters, max_price: e.target.value })}
             />
           </Grid>
-          <Grid item xs={12} md={2}>
+
+          <Grid item xs={6} md={2}>
             <TextField
-              select
               fullWidth
-              label="Vietų skaičius"
+              label="Min vietų sk."
+              type="number"
               value={filters.capacity}
               onChange={(e) => setFilters({ ...filters, capacity: e.target.value })}
-            >
-              <MenuItem value="">Visi</MenuItem>
-              <MenuItem value="1">1 vieta</MenuItem>
-              <MenuItem value="2">2 vietos</MenuItem>
-              <MenuItem value="3">3 vietos</MenuItem>
-              <MenuItem value="4">4+ vietos</MenuItem>
-            </TextField>
+            />
           </Grid>
-          <Grid item xs={12} md={3}>
+
+          <Grid item xs={6} md={3} sx={{ display: 'flex', alignItems: 'stretch' }}>
             <Button
-              variant="outlined"
               fullWidth
+              variant="outlined"
               onClick={() => setFilters({
                 dormitory_id: '',
                 min_price: '',
@@ -264,9 +271,10 @@ function RoomsPage() {
             </Grid>
           ) : (
             rooms.map((room) => {
-              const occupied = room.occupied_beds || 0;
-              const available = room.available_beds || 0;
-              
+              const { occupied, available, totalFree } = getRoomCounts(room);
+
+              const bookingDisabled = available <= 0;
+
               return (
                 <Grid item xs={12} sm={6} md={4} lg={3} key={room.id}>
                   <Card sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -314,9 +322,9 @@ function RoomsPage() {
                           🏢 Aukštas: {room.floor || 'N/A'}
                         </Typography>
 
-                        {available > 0 && (
+                        {totalFree === 0 && (
                           <Typography variant="body2" sx={{ mt: 1, color: 'success.main', fontWeight: 'bold' }}>
-                            ✓ {available} {available === 1 ? 'laisva vieta' : 'laisvos vietos'}
+                            ✓ {totalFree} {totalFree === 1 ? 'laisva vieta' : 'laisvos vietos'}
                           </Typography>
                         )}
                       </Box>
@@ -333,17 +341,18 @@ function RoomsPage() {
                           ))}
                         </Box>
                       )}
-
-                      <Button 
-                        variant="contained" 
-                        fullWidth 
-                        sx={{ mt: 2 }}
-                        onClick={() => handleOpenBooking(room)}
-                        disabled={!user || user.user_type !== 'STUDENT' || available === 0}
-                      >
-                        {available === 0 ? 'Nėra vietų' : 'Užsiregistruoti apžiūrai'}
-                      </Button>
                     </CardContent>
+                    
+                    <Box sx={{ p: 2, pt: 0, pb: 2, display: 'flex', justifyContent: 'flex-end' }}>
+                      <Button
+                        variant="contained"
+                        size="small"
+                        onClick={() => handleOpenBooking(room)}
+                        disabled={bookingDisabled}
+                      >
+                        Registruotis apžiūrai
+                      </Button>
+                    </Box>
                   </Card>
                 </Grid>
               );
@@ -367,7 +376,9 @@ function RoomsPage() {
                 {bookingDialog.room.dormitory_name}
               </Typography>
               <Typography variant="body2">
-                €{bookingDialog.room.price}/mėn | {bookingDialog.room.available_beds} laisva vieta
+                €{bookingDialog.room.price}/mėn |{' '}
+                {bookingDialog.room.available_beds}{' '}
+                {bookingDialog.room.available_beds === 1 ? 'laisva vieta' : 'laisvos vietos'}
               </Typography>
             </Box>
           )}

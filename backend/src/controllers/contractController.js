@@ -1,4 +1,5 @@
 import { query } from '../config/database.js';
+import { recalculateRoomStatus } from './roomController.js';
 
 // @desc    Get my contracts
 // @route   GET /api/contracts/my
@@ -135,7 +136,7 @@ export const signContract = async (req, res) => {
       });
     }
 
-    // Check if room has available space
+    // Check if room has available space (pagal occupied_beds)
     const availableBeds = contract.capacity - (contract.occupied_beds || 0);
     if (availableBeds <= 0) {
       return res.status(400).json({
@@ -152,17 +153,17 @@ export const signContract = async (req, res) => {
       [id]
     );
 
-    // Update room occupied_beds and status
+    // Atnaujinam occupied_beds (1 daugiau)
     const newOccupiedBeds = (contract.occupied_beds || 0) + 1;
-    const newStatus = newOccupiedBeds >= contract.capacity ? 'OCCUPIED' : 'RESERVED';
-
     await query(
       `UPDATE rooms 
-       SET occupied_beds = $1,
-           status = $2
-       WHERE id = $3`,
-      [newOccupiedBeds, newStatus, contract.room_id]
+       SET occupied_beds = $1
+       WHERE id = $2`,
+      [newOccupiedBeds, contract.room_id]
     );
+
+    // Perskaičiuojam statusą pagal taisykles (jei visos vietos užimtos – OCCUPIED ir t.t.)
+    await recalculateRoomStatus(contract.room_id);
 
     res.json({
       success: true,

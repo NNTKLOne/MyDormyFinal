@@ -138,7 +138,7 @@ function StudentDashboard() {
                       <TableCell>Apžiūros data</TableCell>
                       <TableCell>Laikas</TableCell>
                       <TableCell>Būsena</TableCell>
-                      <TableCell>Pastabos</TableCell>
+                      <TableCell>Budėtojo komentaras</TableCell>
                       <TableCell>Veiksmai</TableCell>
                     </TableRow>
                   </TableHead>
@@ -168,7 +168,7 @@ function StudentDashboard() {
                             </Typography>
                           </TableCell>
                           <TableCell>
-                            {inspection.status === 'PENDING' && (
+                            {(inspection.status === 'PENDING' || inspection.status === 'APPROVED') && (
                               <Button
                                 size="small"
                                 color="error"

@@ -92,27 +92,8 @@ export const createInspection = async (req, res) => {
 // @access  Private (Supervisor)
 export const getSupervisorInspections = async (req, res) => {
   try {
-    const supervisorId = req.user.id;
-
-    // Find the dormitory assigned to this supervisor
-    const dormResult = await query(
-        "SELECT id FROM dormitories WHERE supervisor_id = $1",
-        [supervisorId]
-    );
-
-    if (dormResult.rows.length === 0) {
-      return res.json({
-        success: true,
-        count: 0,
-        data: []
-      });
-    }
-
-    const dormitoryId = dormResult.rows[0].id;
-
-    // Load only inspections for this dormitory
     const result = await query(
-        `SELECT i.*, 
+      `SELECT i.*, 
               r.room_number, 
               r.capacity,
               r.occupied_beds,
@@ -129,9 +110,7 @@ export const getSupervisorInspections = async (req, res) => {
        JOIN users u ON i.student_id = u.id
        LEFT JOIN contact_information ci ON u.contact_id = ci.id
        WHERE i.status = 'PENDING'
-         AND r.dormitory_id = $1
-       ORDER BY i.inspection_date, i.inspection_time`,
-        [dormitoryId]
+       ORDER BY i.inspection_date, i.inspection_time`
     );
 
     res.json({
@@ -139,7 +118,6 @@ export const getSupervisorInspections = async (req, res) => {
       count: result.rows.length,
       data: result.rows
     });
-
   } catch (error) {
     console.error('Get inspections error:', error);
     res.status(500).json({
@@ -148,7 +126,6 @@ export const getSupervisorInspections = async (req, res) => {
     });
   }
 };
-
 
 // @desc    Approve/Reject inspection
 // @route   PUT /api/inspections/:id/status
