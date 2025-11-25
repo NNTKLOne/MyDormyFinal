@@ -87,45 +87,56 @@ export const createInspection = async (req, res) => {
   }
 };
 
-// @desc    Get inspections for supervisor
+// @desc    Get inspections for supervisor (filtered by assigned dormitory)
 // @route   GET /api/inspections/supervisor
 // @access  Private (Supervisor)
 export const getSupervisorInspections = async (req, res) => {
-  try {
-    const result = await query(
-      `SELECT i.*, 
-              r.room_number, 
-              r.capacity,
-              r.occupied_beds,
-              r.status as room_status,
-              (r.capacity - COALESCE(r.occupied_beds, 0)) as available_beds,
-              d.name as dormitory_name,
-              u.first_name, 
-              u.last_name, 
-              u.email,
-              ci.phone
-       FROM inspections i
-       JOIN rooms r ON i.room_id = r.id
-       JOIN dormitories d ON r.dormitory_id = d.id
-       JOIN users u ON i.student_id = u.id
-       LEFT JOIN contact_information ci ON u.contact_id = ci.id
-       WHERE i.status = 'PENDING'
-       ORDER BY i.inspection_date, i.inspection_time`
-    );
+    try {
+        // Supervisor mato TIK savo bendrabučio apžiūras
+        const supervisorId = req.user.id;
 
-    res.json({
-      success: true,
-      count: result.rows.length,
-      data: result.rows
-    });
-  } catch (error) {
-    console.error('Get inspections error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Serverio klaida'
-    });
-  }
+        const result = await query(
+            `
+      SELECT i.*, 
+             r.room_number, 
+             r.capacity,
+             r.occupied_beds,
+             r.status as room_status,
+             (r.capacity - COALESCE(r.occupied_beds, 0)) as available_beds,
+             d.name as dormitory_name,
+             u.first_name, 
+             u.last_name, 
+             u.email,
+             ci.phone
+      FROM inspections i
+      JOIN rooms r ON i.room_id = r.id
+      JOIN dormitories d ON r.dormitory_id = d.id
+      JOIN users u ON i.student_id = u.id
+      LEFT JOIN contact_information ci ON u.contact_id = ci.id
+      WHERE i.status = 'PENDING'
+        AND r.dormitory_id IN (
+            SELECT id FROM dormitories WHERE supervisor_id = $1
+        )
+      ORDER BY i.inspection_date, i.inspection_time
+      `,
+            [supervisorId]
+        );
+
+        res.json({
+            success: true,
+            count: result.rows.length,
+            data: result.rows
+        });
+
+    } catch (error) {
+        console.error('Get inspections error:', error);
+        res.status(500).json({
+            success: false,
+            message: 'Serverio klaida'
+        });
+    }
 };
+
 
 // @desc    Approve/Reject inspection
 // @route   PUT /api/inspections/:id/status

@@ -1,5 +1,4 @@
 import { query } from '../config/database.js';
-import { recalculateRoomStatus } from './roomController.js';
 
 // @desc    Get my contracts
 // @route   GET /api/contracts/my

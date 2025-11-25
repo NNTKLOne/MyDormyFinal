@@ -3,6 +3,9 @@ import { query } from '../config/database.js';
 // @desc    Get all rooms with filters
 // @route   GET /api/rooms
 // @access  Public
+// @desc    Get all rooms with filters
+// @route   GET /api/rooms
+// @access  Public (but filtered for dormitory admin)
 export const getRooms = async (req, res) => {
   try {
     const { dormitory_id, min_price, max_price, capacity, room_type, status } = req.query;
@@ -10,43 +13,45 @@ export const getRooms = async (req, res) => {
     const normalizedStatus = status ? status.toUpperCase() : null;
 
     let queryText = `
-      SELECT 
+      SELECT
         r.*,
         d.name as dormitory_name,
         d.address as dormitory_address,
-        -- rezervuotos vietos (apžiūros)
         COALESCE((
-          SELECT COUNT(*) 
-          FROM inspections i
-          WHERE i.room_id = r.id 
-            AND i.status IN ('PENDING', 'APPROVED')
-        ), 0) as reserved_slots,
-        -- realiai laisvos vietos: capacity - užimtos - rezervuotos
+                   SELECT COUNT(*)
+                   FROM inspections i
+                   WHERE i.room_id = r.id
+                     AND i.status IN ('PENDING', 'APPROVED')
+                 ), 0) as reserved_slots,
         GREATEST(
-          r.capacity 
-          - COALESCE(r.occupied_beds, 0)
-          - COALESCE((
-            SELECT COUNT(*) 
-            FROM inspections i
-            WHERE i.room_id = r.id 
-              AND i.status IN ('PENDING', 'APPROVED')
-          ), 0),
-          0
+            r.capacity
+              - COALESCE(r.occupied_beds, 0)
+              - COALESCE((
+                           SELECT COUNT(*)
+                           FROM inspections i
+                           WHERE i.room_id = r.id
+                             AND i.status IN ('PENDING', 'APPROVED')
+                         ), 0),
+            0
         ) as available_beds
       FROM rooms r
-      JOIN dormitories d ON r.dormitory_id = d.id
+             JOIN dormitories d ON r.dormitory_id = d.id
       WHERE 1=1
     `;
 
     const params = [];
     let paramCount = 1;
 
-    // // Only show rooms with at least 1 available bed (unless admin viewing all)
-    // if (!status) {
-    //   queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
-    // }
+    // 👉 RESTRIKCIJA BENDRABUČIO ADMINUI
+    if (req.user && req.user.user_type === "DORMITORY_ADMIN") {
+      queryText += ` AND r.dormitory_id IN (
+        SELECT id FROM dormitories WHERE admin_id = $${paramCount}
+      )`;
+      params.push(req.user.id);
+      paramCount++;
+    }
 
-      // Tik jei status NEPATEIKTAS - rodom tik kambarius su laisvom vietom
+    // Tik jei status NEPATEIKTAS - rodom tik kambarius su laisvom vietom
     if (!normalizedStatus) {
       queryText += ` AND (r.capacity - COALESCE(r.occupied_beds, 0)) > 0`;
     }
@@ -81,13 +86,7 @@ export const getRooms = async (req, res) => {
       paramCount++;
     }
 
-    // if (status) {
-    //   queryText += ` AND r.status = $${paramCount}`;
-    //   params.push(status);
-    //   paramCount++;
-    // }
-
-        // Čia svarbiausia vieta: status filtras TIK jei ne 'ALL'
+    // Filtruojame tik jei status ne ALL
     if (normalizedStatus && normalizedStatus !== 'ALL') {
       queryText += ` AND r.status = $${paramCount}`;
       params.push(normalizedStatus);
@@ -111,6 +110,7 @@ export const getRooms = async (req, res) => {
     });
   }
 };
+
 
 // @desc    Get single room
 // @route   GET /api/rooms/:id
