@@ -110,6 +110,12 @@ function LoginPage() {
             <Typography variant="caption" display="block">
               📧 admin@vgtu.lt / password123
             </Typography>
+            <Typography variant="caption" display="block">
+              📧 supervisor@vgtu.lt / password123
+            </Typography>
+            <Typography variant="caption" display="block">
+              📧 dorm1@vgtu.lt / password123
+            </Typography>
           </Box>
         </Paper>
       </Box>
