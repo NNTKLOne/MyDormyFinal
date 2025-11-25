@@ -77,6 +77,7 @@ const createTables = async () => {
         address TEXT NOT NULL,
         contact_id INTEGER REFERENCES contact_information(id) ON DELETE SET NULL,
         admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        supervisor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         total_rooms INTEGER DEFAULT 0,
         available_rooms INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

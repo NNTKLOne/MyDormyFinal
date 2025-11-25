@@ -12,9 +12,9 @@ const generatePassword = () => {
   return password;
 };
 
-// @desc    Create new user with contact information
-// @route   POST /api/users
-// @access  Private (University Admin)
+// ================================================
+// CREATE USER
+// ================================================
 export const createUser = async (req, res) => {
   try {
     const {
@@ -26,7 +26,8 @@ export const createUser = async (req, res) => {
       study_program,
       student_id,
       phone,
-      address
+      address,
+      assigned_dormitory_id
     } = req.body;
 
     if (!first_name || !last_name || !email || !user_type) {
@@ -36,10 +37,10 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Check if email already exists in users
+    // Check if email exists
     const existingUser = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+        'SELECT id FROM users WHERE email = $1',
+        [email]
     );
 
     if (existingUser.rows.length > 0) {
@@ -49,49 +50,72 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Generate temporary password
+    // Generate password
     const temporaryPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
-    // Create contact information first
+    // Create contact info
     const contactResult = await query(
-      `INSERT INTO contact_information (phone, email, address) 
-       VALUES ($1, $2, $3) 
-       RETURNING id`,
-      [phone || null, email, address || null]
+        `INSERT INTO contact_information (phone, email, address)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [phone || null, email, address || null]
     );
     const contact_id = contactResult.rows[0].id;
 
-    // Create user with all fields
-    const result = await query(
-      `INSERT INTO users 
-       (first_name, last_name, email, password_hash, user_type, 
-        contact_id, faculty, study_program, student_id, 
-        is_active, must_change_password)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, true)
-       RETURNING id, first_name, last_name, email, user_type, 
-                 faculty, study_program, student_id, is_active`,
-      [
-        first_name,
-        last_name,
-        email,
-        hashedPassword,
-        user_type,
-        contact_id,
-        faculty || null,
-        study_program || null,
-        student_id || null
-      ]
+    // Insert user
+    const userResult = await query(
+        `INSERT INTO users
+         (first_name, last_name, email, password_hash, user_type,
+          contact_id, faculty, study_program, student_id,
+          is_active, must_change_password)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, true)
+         RETURNING id, first_name, last_name, email, user_type,
+           faculty, study_program, student_id, is_active`,
+        [
+          first_name,
+          last_name,
+          email,
+          hashedPassword,
+          user_type,
+          contact_id,
+          faculty || null,
+          study_program || null,
+          student_id || null
+        ]
     );
+
+    const newUser = userResult.rows[0];
+
+    // ============================================
+    // ASSIGN ADMIN / SUPERVISOR TO DORMITORY
+    // AND UPDATE contact_id 💡
+    // ============================================
+    if (assigned_dormitory_id) {
+      if (user_type === "SUPERVISOR") {
+        await query(
+            "UPDATE dormitories SET supervisor_id = $1 WHERE id = $2",
+            [newUser.id, assigned_dormitory_id]
+        );
+      }
+
+      if (user_type === "DORMITORY_ADMIN") {
+        await query(
+            "UPDATE dormitories SET admin_id = $1, contact_id = $2 WHERE id = $3",
+            [newUser.id, contact_id, assigned_dormitory_id]  // 🔧 FIX ADDED
+        );
+      }
+    }
 
     res.status(201).json({
       success: true,
       message: 'Vartotojas sėkmingai sukurtas',
       data: {
-        user: result.rows[0],
-        temporaryPassword: temporaryPassword
+        user: newUser,
+        temporaryPassword
       }
     });
+
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({
@@ -101,15 +125,15 @@ export const createUser = async (req, res) => {
   }
 };
 
-// @desc    Get all users with contact information
-// @route   GET /api/users
-// @access  Private (University Admin, Dormitory Admin)
+// ================================================
+// GET ALL USERS
+// ================================================
 export const getAllUsers = async (req, res) => {
   try {
     const { user_type } = req.query;
 
     let queryText = `
-      SELECT 
+      SELECT
         u.id,
         u.first_name,
         u.last_name,
@@ -124,7 +148,7 @@ export const getAllUsers = async (req, res) => {
         ci.phone,
         ci.address
       FROM users u
-      LEFT JOIN contact_information ci ON u.contact_id = ci.id
+             LEFT JOIN contact_information ci ON u.contact_id = ci.id
       WHERE 1=1
     `;
 
@@ -143,6 +167,7 @@ export const getAllUsers = async (req, res) => {
       count: result.rows.length,
       data: result.rows
     });
+
   } catch (error) {
     console.error('Get users error:', error);
     res.status(500).json({
@@ -152,9 +177,9 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// @desc    Update user
-// @route   PUT /api/users/:id
-// @access  Private (University Admin)
+// ================================================
+// UPDATE USER
+// ================================================
 export const updateUser = async (req, res) => {
   try {
     const { id } = req.params;
@@ -168,64 +193,83 @@ export const updateUser = async (req, res) => {
       student_id,
       is_active,
       phone,
-      address
+      address,
+      assigned_dormitory_id
     } = req.body;
 
-    // Get user's contact_id
-    const userResult = await query(
-      'SELECT contact_id FROM users WHERE id = $1',
-      [id]
+    // Get contact_id
+    const userData = await query(
+        'SELECT contact_id FROM users WHERE id = $1',
+        [id]
     );
 
-    if (userResult.rows.length === 0) {
+    if (userData.rows.length === 0) {
       return res.status(404).json({
         success: false,
         message: 'Vartotojas nerastas'
       });
     }
 
-    const contact_id = userResult.rows[0].contact_id;
+    const contact_id = userData.rows[0].contact_id;
 
-    // Update contact information
-    if (contact_id) {
-      await query(
+    // Update contact info
+    await query(
         'UPDATE contact_information SET phone = $1, address = $2 WHERE id = $3',
         [phone || null, address || null, contact_id]
-      );
-    }
+    );
 
     // Update user
-    const result = await query(
-      `UPDATE users 
-       SET first_name = COALESCE($1, first_name),
-           last_name = COALESCE($2, last_name),
-           email = COALESCE($3, email),
-           user_type = COALESCE($4, user_type),
-           faculty = COALESCE($5, faculty),
-           study_program = COALESCE($6, study_program),
-           student_id = COALESCE($7, student_id),
-           is_active = COALESCE($8, is_active)
-       WHERE id = $9
-       RETURNING id, first_name, last_name, email, user_type, 
-                 faculty, study_program, student_id, is_active`,
-      [
-        first_name,
-        last_name,
-        email,
-        user_type,
-        faculty,
-        study_program,
-        student_id,
-        is_active,
-        id
-      ]
+    const updatedUser = await query(
+        `UPDATE users
+         SET first_name = COALESCE($1, first_name),
+             last_name = COALESCE($2, last_name),
+             email = COALESCE($3, email),
+             user_type = COALESCE($4, user_type),
+             faculty = COALESCE($5, faculty),
+             study_program = COALESCE($6, study_program),
+             student_id = COALESCE($7, student_id),
+             is_active = COALESCE($8, is_active)
+         WHERE id = $9
+         RETURNING id, first_name, last_name, email, user_type,
+           faculty, study_program, student_id, is_active`,
+        [
+          first_name,
+          last_name,
+          email,
+          user_type,
+          faculty,
+          study_program,
+          student_id,
+          is_active,
+          id
+        ]
     );
+
+    // ============================================
+    // UPDATE ADMIN / SUPERVISOR RELATIONSHIP
+    // ============================================
+    if (assigned_dormitory_id) {
+      if (user_type === "SUPERVISOR") {
+        await query(
+            "UPDATE dormitories SET supervisor_id = $1 WHERE id = $2",
+            [id, assigned_dormitory_id]
+        );
+      }
+
+      if (user_type === "DORMITORY_ADMIN") {
+        await query(
+            "UPDATE dormitories SET admin_id = $1, contact_id = $2 WHERE id = $3",
+            [id, contact_id, assigned_dormitory_id] // 🔧 FIX ADDED
+        );
+      }
+    }
 
     res.json({
       success: true,
       message: 'Vartotojas atnaujintas',
-      data: result.rows[0]
+      data: updatedUser.rows[0]
     });
+
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({
@@ -242,10 +286,10 @@ export const deleteUser = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if user has active contracts
+    // Check active contracts
     const contractCheck = await query(
-      "SELECT COUNT(*) as count FROM contracts WHERE student_id = $1 AND status IN ('ACTIVE', 'SIGNED')",
-      [id]
+        "SELECT COUNT(*) as count FROM contracts WHERE student_id = $1 AND status IN ('ACTIVE', 'SIGNED')",
+        [id]
     );
 
     if (parseInt(contractCheck.rows[0].count) > 0) {
@@ -255,10 +299,10 @@ export const deleteUser = async (req, res) => {
       });
     }
 
-    // Get contact_id before deleting user
+    // Get contact_id and user type
     const userResult = await query(
-      'SELECT contact_id FROM users WHERE id = $1',
-      [id]
+        'SELECT contact_id, user_type FROM users WHERE id = $1',
+        [id]
     );
 
     if (userResult.rows.length === 0) {
@@ -268,12 +312,25 @@ export const deleteUser = async (req, res) => {
       });
     }
 
-    const contact_id = userResult.rows[0].contact_id;
+    const { contact_id, user_type } = userResult.rows[0];
 
-    // Delete user (CASCADE will handle related records)
+    // ===============================
+    //   REMOVE ASSIGNMENTS ONLY IF ADMIN
+    // ===============================
+    if (user_type === "DORMITORY_ADMIN") {
+      await query(
+          `UPDATE dormitories 
+         SET admin_id = NULL,
+             contact_id = NULL 
+         WHERE admin_id = $1`,
+          [id]  // Only admin_id is cleared! 🔧 FIXED
+      );
+    }
+
+    // Delete user
     await query('DELETE FROM users WHERE id = $1', [id]);
 
-    // Delete contact information if exists
+    // Delete contact info
     if (contact_id) {
       await query('DELETE FROM contact_information WHERE id = $1', [contact_id]);
     }
@@ -282,6 +339,7 @@ export const deleteUser = async (req, res) => {
       success: true,
       message: 'Vartotojas ištrintas'
     });
+
   } catch (error) {
     console.error('Delete user error:', error);
     res.status(500).json({
