@@ -1,7 +1,6 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme, CssBaseline, Box, Drawer, List, ListItem, ListItemIcon, ListItemText, ListItemButton, Typography, Divider } from '@mui/material';
 import { AuthProvider, useAuth } from './context/AuthContext';
-import { useState } from 'react';
 import {
   Dashboard as DashboardIcon,
   Search as SearchIcon,
@@ -10,8 +9,7 @@ import {
   AdminPanelSettings as AdminIcon,
   SupervisorAccount as SupervisorIcon,
   MeetingRoom as RoomIcon,
-  Notifications as NotificationsIcon,
-  Badge
+  Description as DescriptionIcon
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -23,6 +21,7 @@ import AdminDashboard from './pages/AdminDashboard';
 import SupervisorDashboard from './pages/SupervisorDashboard';
 import DormAdminDashboard from './pages/DormAdminDashboard';
 import ResidentDashboard from './pages/ResidentDashboard';
+import DormAdminContracts from './pages/DormAdminContracts';
 
 const theme = createTheme({
   palette: {
@@ -67,7 +66,8 @@ function Sidebar() {
       );
     } else if (user.user_type === 'DORMITORY_ADMIN') {
       items.push(
-        { text: 'Kambarių valdymas', icon: <RoomIcon />, path: '/dorm-admin' }
+        { text: 'Kambarių valdymas', icon: <RoomIcon />, path: '/dorm-admin' },
+        { text: 'Sutarčių valdymas', icon: <DescriptionIcon />, path: '/dorm-admin/contracts' }
       );
     }
 
@@ -240,6 +240,14 @@ function AppContent() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dorm-admin/contracts"
+            element={
+              <ProtectedRoute allowedRoles={['DORMITORY_ADMIN']}>
+                <DormAdminContracts />
+              </ProtectedRoute>
+            }
+          />  
 
           {/* Supervisor Routes */}
           <Route

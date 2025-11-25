@@ -170,13 +170,13 @@ function RoomsPage() {
     return 'success';
   };
 
-  const getStatusText = (room) => {
-    const { reserved, totalFree } = getRoomCounts(room);
-
-    if (totalFree === 0) return 'Pilnas';
-    // Visada rodom, kiek iš laisvų vietų yra rezervuota
-    return `Rezervuota ${reserved}/${totalFree}`;
-  };
+    const getStatusText = (room) => {
+      const { reserved, totalFree } = getRoomCounts(room);
+      
+      // Studentui rodomi tik kambariai su totalFree > 0
+      // todėl visuomet tik rodome rezervacijas
+      return `Rezervuota ${reserved}/${totalFree}`;
+    };
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -321,12 +321,6 @@ function RoomsPage() {
                         <Typography variant="body2">
                           🏢 Aukštas: {room.floor || 'N/A'}
                         </Typography>
-
-                        {totalFree === 0 && (
-                          <Typography variant="body2" sx={{ mt: 1, color: 'success.main', fontWeight: 'bold' }}>
-                            ✓ {totalFree} {totalFree === 1 ? 'laisva vieta' : 'laisvos vietos'}
-                          </Typography>
-                        )}
                       </Box>
 
                       {room.amenities && room.amenities.length > 0 && (

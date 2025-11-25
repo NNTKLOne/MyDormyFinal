@@ -22,7 +22,7 @@ export const recalculateRoomStatus = async (roomId) => {
       SELECT COUNT(*) AS current_residents
       FROM contracts c
       WHERE c.room_id = r.id
-        AND c.status IN ('ACTIVE', 'SIGNED')
+        AND c.status = 'ACTIVE'
     ) ct ON TRUE
     LEFT JOIN LATERAL (
       SELECT COUNT(*) AS reserved_slots
@@ -217,7 +217,7 @@ export const getRoom = async (req, res) => {
         SELECT COUNT(*) AS current_residents
         FROM contracts c
         WHERE c.room_id = r.id
-          AND c.status IN ('ACTIVE', 'SIGNED')
+          AND c.status = 'ACTIVE'
       ) ct ON TRUE
       LEFT JOIN LATERAL (
         SELECT COUNT(*) AS reserved_slots

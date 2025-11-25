@@ -76,7 +76,8 @@ function StudentDashboard() {
       'PENDING': { label: 'Laukia patvirtinimo', color: 'warning' },
       'APPROVED': { label: 'Patvirtinta', color: 'success' },
       'REJECTED': { label: 'Atmesta', color: 'error' },
-      'CANCELED': { label: 'Atšaukta', color: 'default' }
+      'CANCELED': { label: 'Atšaukta', color: 'default' },
+      'COMPLETED': { label: 'Įvykdyta', color: 'info' }
     };
     const { label, color } = map[status] || { label: status, color: 'default' };
     return <Chip label={label} color={color} size="small" />;
@@ -84,15 +85,35 @@ function StudentDashboard() {
 
   const getContractStatusChip = (status) => {
     const map = {
-      'DRAFT': { label: 'Juodraštis', color: 'default' },
-      'SIGNED': { label: 'Pasirašyta', color: 'info' },
-      'ACTIVE': { label: 'Aktyvi', color: 'success' },
-      'EXPIRED': { label: 'Pasibaigusi', color: 'default' },
-      'TERMINATED': { label: 'Nutraukta', color: 'error' }
+      DRAFT: { label: 'Laukiama pasirašymo', color: 'default' },
+      SIGNED: { label: 'Laukiama bendrabučio administratoriaus patvirtinimo', color: 'info' },
+      ACTIVE: { label: 'Aktyvi', color: 'success' },
+      EXPIRED: { label: 'Pasibaigusi', color: 'default' },
+      TERMINATED: { label: 'Nutraukta', color: 'error' }
     };
     const { label, color } = map[status] || { label: status, color: 'default' };
     return <Chip label={label} color={color} size="small" />;
   };
+
+  const handleSignContract = async () => {
+    if (!myRoom?.contract_id) return;
+    if (!confirm('Ar tikrai norite pasirašyti šią sutartį?')) return;
+
+    try {
+      await axios.put(`/api/contracts/${myRoom.contract_id}/sign`);
+      setMessage({
+        text: 'Sutartis pasirašyta. Laukiama bendrabučio administratoriaus patvirtinimo.',
+        severity: 'success'
+      });
+      fetchData();
+    } catch (error) {
+      setMessage({
+        text: error.response?.data?.message || 'Klaida pasirašant sutartį',
+        severity: 'error'
+      });
+    }
+  };
+
 
   return (
     <Container maxWidth="xl" sx={{ py: 4 }}>
@@ -265,11 +286,25 @@ function StudentDashboard() {
                           </Typography>
                           {myRoom.roommates.map((roommate, index) => (
                             <Typography key={index} variant="body2" color="text.secondary">
-                              • {roommate.first_name} {roommate.last_name} ({roommate.email})
+                              - {roommate.first_name} {roommate.last_name} ({roommate.email})
+                              {roommate.study_program && (
+                                <> – {roommate.study_program}</>
+                              )}
                             </Typography>
                           ))}
                         </Grid>
                       )}
+                      
+                      {myRoom.contract_status === 'DRAFT' && (
+                        <Grid item xs={12} sx={{ mt: 4 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                            <Button variant="contained" color="primary" onClick={handleSignContract}>
+                              Pasirašyti sutartį
+                            </Button>
+                          </Box>
+                        </Grid>
+                      )}
+
                     </Grid>
                   </CardContent>
                 </Card>

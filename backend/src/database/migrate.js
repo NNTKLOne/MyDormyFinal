@@ -32,7 +32,7 @@ const createTables = async () => {
       CREATE TYPE notification_status AS ENUM ('SEEN', 'UNSEEN');
       CREATE TYPE request_status AS ENUM ('SUBMITTED', 'UNDER_REVIEW', 'APPROVED', 'REJECTED');
       CREATE TYPE reservation_status AS ENUM ('PENDING_APPROVAL', 'APPROVED', 'CANCELED');
-      CREATE TYPE inspection_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED');
+      CREATE TYPE inspection_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED', 'COMPLETED');
       CREATE TYPE room_status AS ENUM ('AVAILABLE', 'RESERVED', 'OCCUPIED');
       CREATE TYPE contract_status AS ENUM ('DRAFT', 'SIGNED', 'ACTIVE', 'EXPIRED', 'TERMINATED');
     `);
@@ -135,6 +135,16 @@ const createTables = async () => {
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Create sequence for contract numbering
+    await client.query(`
+      CREATE SEQUENCE IF NOT EXISTS contract_sequence
+        START WITH 1
+        INCREMENT BY 1
+        NO MINVALUE
+        NO MAXVALUE
+        CACHE 1;
+      `);
 
     // Create contracts table - request_id is NOW OPTIONAL!
     await client.query(`

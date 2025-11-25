@@ -64,7 +64,22 @@ export const createInspection = async (req, res) => {
     if (existingInspection.rows.length > 0) {
       return res.status(400).json({
         success: false,
-        message: 'Jūs jau turite aktyvią apžiūros užklausą'
+        message: 'Jūs jau turite aktyvią kambario apžiūros užklausą'
+      });
+    }
+
+    // Check if student already has a contract (DRAFT, SIGNED, ACTIVE)
+    const existingContract = await query(
+      `SELECT id FROM contracts 
+      WHERE student_id = $1 
+        AND status IN ('DRAFT', 'SIGNED', 'ACTIVE')`,
+      [student_id]
+    );
+
+    if (existingContract.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Jūs jau turite aktyvią kambario rezervaciją'
       });
     }
 
@@ -171,7 +186,13 @@ export const updateInspectionStatus = async (req, res) => {
 
     // Get inspection details
     const inspectionRes = await query(
-      'SELECT student_id, room_id FROM inspections WHERE id = $1',
+      `SELECT 
+        i.student_id, 
+        i.room_id,
+        r.price AS room_price
+      FROM inspections i
+      JOIN rooms r ON i.room_id = r.id
+      WHERE i.id = $1`,
       [id]
     );
 
@@ -220,6 +241,46 @@ export const updateInspectionStatus = async (req, res) => {
         'UPDATE inspections SET status = $1 WHERE id = $2',
         [status, id]
       );
+    }
+
+    // Jei budėtojas PATVIRTINO apžiūrą – automatiškai sukuriam DRAFT sutartį
+    if (isSupervisor && status === 'APPROVED') {
+      // Patikrinam, ar studentas jau neturi sutarties šiam kambariui
+      const existingContract = await query(
+        `SELECT id 
+        FROM contracts 
+        WHERE student_id = $1 
+          AND room_id = $2 
+          AND status IN ('DRAFT', 'SIGNED', 'ACTIVE')`,
+        [inspection.student_id, inspection.room_id]
+      );
+
+      if (existingContract.rows.length === 0) {
+        // Gauname sekos numerį iš DB
+        const seqRes = await query(`SELECT nextval('contract_sequence') AS seq`);
+        const seq = seqRes.rows[0].seq;
+
+        // Sudarome kontrakto numerį CNT-0001 formatu
+        const contractNumber = `CNT-${String(seq).padStart(4, '0')}`;
+
+        const startDate = new Date();
+        const endDate = new Date();
+        endDate.setMonth(endDate.getMonth() + 10);
+
+        await query(
+          `INSERT INTO contracts 
+          (student_id, room_id, contract_number, start_date, end_date, monthly_price, status)
+          VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT')`,
+          [
+            inspection.student_id,
+            inspection.room_id,
+            contractNumber,
+            startDate,
+            endDate,
+            inspection.room_price // iš SELECT viršuje
+          ]
+        );
+      }
     }
 
     // Po pakeitimo perskaičiuojam kambario statusą
