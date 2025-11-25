@@ -25,8 +25,6 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// Test database connection
-
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -59,14 +57,14 @@ app.use(errorHandler);
 // Start server
 app.listen(PORT, () => {
   console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-  console.log(`🚀 MyDormy Server running on port ${PORT}`);
-  console.log(`📍 API: http://localhost:${PORT}`);
-  console.log(`🏥 Health: http://localhost:${PORT}/health`);
+  console.log(` MyDormy Server running on port ${PORT}`);
+  console.log(`   API: http://localhost:${PORT}`);
+  console.log(` Health: http://localhost:${PORT}/health`);
   console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
 });
 
 process.on('unhandledRejection', (err) => {
-  console.error('❌ Unhandled Promise Rejection:', err);
+  console.error('Unhandled Promise Rejection:', err);
 });
 
 export default app;

@@ -371,11 +371,11 @@ function RoomsPage() {
                       
                       <Box sx={{ mt: 2 }}>
                         <Typography variant="body2">
-                          🛏️ Užimta: {occupied}/{room.capacity} vietų
+                          - Užimta: {occupied}/{room.capacity} vietų
                         </Typography>
                         
                         <Typography variant="body2">
-                          🏢 Aukštas: {room.floor || 'N/A'}
+                          - Aukštas: {room.floor || 'N/A'}
                         </Typography>
                       </Box>
 

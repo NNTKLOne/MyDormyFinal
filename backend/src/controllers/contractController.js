@@ -131,6 +131,33 @@ export const updateContractStatusByAdmin = async (req, res) => {
          WHERE id = $1`,
         [id]
       );
+      
+      // Atnaujinam susijusią kontaktinę informaciją su bendrabučio adresu
+      const contactRes = await query(
+        `SELECT 
+           u.contact_id,
+           d.address AS dorm_address
+         FROM contracts c
+         JOIN users u ON c.student_id = u.id
+         JOIN rooms r ON c.room_id = r.id
+         JOIN dormitories d ON r.dormitory_id = d.id
+         WHERE c.id = $1`,
+        [id]
+      );
+
+      if (contactRes.rows.length > 0) {
+        const { contact_id, dorm_address } = contactRes.rows[0];
+
+        if (contact_id && dorm_address) {
+          await query(
+            `UPDATE contact_information
+             SET address = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
+            [dorm_address, contact_id]
+          );
+        }
+      }
 
       // 2) Randam susijusią apžiūrą ir ją pažymim kaip COMPLETED
       const inspectionRes = await query(
