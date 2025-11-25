@@ -92,7 +92,8 @@ function SupervisorDashboard() {
       'PENDING':   { label: 'Laukia patvirtinimo', color: 'warning' },
       'APPROVED':  { label: 'Patvirtinta',         color: 'success' },
       'REJECTED':  { label: 'Atmesta',             color: 'error' },
-      'CANCELED':  { label: 'Atšaukta',            color: 'default' }
+      'CANCELED':  { label: 'Atšaukta',            color: 'default' },
+      'COMPLETED': { label: 'Įvykdyta',            color: 'info' }
     };
 
     const { label, color } = map[status] || { label: status, color: 'default' };
