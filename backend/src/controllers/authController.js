@@ -90,13 +90,23 @@ export const login = async (req, res) => {
 export const getMe = async (req, res) => {
   try {
     const result = await query(
-      `SELECT u.id, u.first_name, u.last_name, u.email, u.user_type, 
-              u.faculty, u.study_program, u.student_id, u.is_active,
-              ci.phone, ci.address
-       FROM users u 
-       LEFT JOIN contact_information ci ON u.contact_id = ci.id 
-       WHERE u.id = $1`,
-      [req.user.id]
+        `SELECT
+           u.id,
+           u.first_name,
+           u.last_name,
+           u.email,
+           u.user_type,
+           u.faculty,
+           u.study_program,
+           u.student_id,
+           u.is_active,
+           u.must_change_password,
+           ci.phone,
+           ci.address
+         FROM users u
+                LEFT JOIN contact_information ci ON u.contact_id = ci.id
+         WHERE u.id = $1`,
+        [req.user.id]
     );
 
     if (result.rows.length === 0) {
@@ -119,6 +129,7 @@ export const getMe = async (req, res) => {
   }
 };
 
+
 // @desc    Change password
 // @route   PUT /api/auth/change-password
 // @access  Private
@@ -127,10 +138,10 @@ export const changePassword = async (req, res) => {
     const { currentPassword, newPassword } = req.body;
 
     // Validation
-    if (!currentPassword || !newPassword) {
+    if (!newPassword) {
       return res.status(400).json({
         success: false,
-        message: 'Prašome įvesti abu slaptažodžius'
+        message: 'Prašome įvesti naują slaptažodį'
       });
     }
 
@@ -141,16 +152,39 @@ export const changePassword = async (req, res) => {
       });
     }
 
-    // Get user with password
+    // Fetch user including must_change_password & password_hash
     const result = await query(
-      'SELECT password_hash FROM users WHERE id = $1',
-      [req.user.id]
+        'SELECT password_hash, must_change_password FROM users WHERE id = $1',
+        [req.user.id]
     );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Vartotojas nerastas'
+      });
+    }
 
     const user = result.rows[0];
 
-    // Check current password
-    const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    let isMatch = false;
+
+    // --- CASE 1: first login (must_change_password = true)
+    if (user.must_change_password) {
+      // No need to check old password
+      isMatch = true;
+    }
+    // --- CASE 2: normal password change, must check old one
+    else {
+      if (!currentPassword) {
+        return res.status(400).json({
+          success: false,
+          message: 'Prašome įvesti dabartinį slaptažodį'
+        });
+      }
+
+      isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+    }
 
     if (!isMatch) {
       return res.status(401).json({
@@ -162,10 +196,10 @@ export const changePassword = async (req, res) => {
     // Hash new password
     const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-    // Update password
+    // Update password and remove must_change_password requirement
     await query(
-      'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
-      [hashedPassword, req.user.id]
+        'UPDATE users SET password_hash = $1, must_change_password = false WHERE id = $2',
+        [hashedPassword, req.user.id]
     );
 
     res.json({
@@ -180,6 +214,7 @@ export const changePassword = async (req, res) => {
     });
   }
 };
+
 
 // @desc    Logout user (client-side token deletion)
 // @route   POST /api/auth/logout

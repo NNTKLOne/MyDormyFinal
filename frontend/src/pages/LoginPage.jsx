@@ -26,13 +26,17 @@ function LoginPage() {
     setLoading(true);
 
     const result = await login(email, password);
-    
+
     if (result.success) {
-      navigate('/rooms');
+      if (result.mustChangePassword) {
+        navigate('/change-password');
+      } else {
+        navigate('/rooms');
+      }
     } else {
       setError(result.message);
     }
-    
+
     setLoading(false);
   };
 
