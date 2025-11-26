@@ -41,20 +41,21 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await axios.post('/api/auth/login', { email, password });
       const { token, user } = response.data.data;
-      
+
       localStorage.setItem('token', token);
       setToken(token);
       setUser(user);
       axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-      
-      return { success: true };
+
+      return { success: true, mustChangePassword: user.must_change_password };
     } catch (error) {
-      return { 
-        success: false, 
-        message: error.response?.data?.message || 'Prisijungimo klaida' 
+      return {
+        success: false,
+        message: error.response?.data?.message || 'Prisijungimo klaida'
       };
     }
   };
+
 
   const logout = () => {
     localStorage.removeItem('token');
