@@ -61,10 +61,10 @@ const seedDatabase = async () => {
         ($1, '101', 1, 1, 1, 150.00, 'Vienvietis', 'OCCUPIED', 'Jaukus vienvietis kambarys su baldais', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
         
         -- Kambarys 102: 2 vietos, 1 SIGNED sutartis (Augustas), 1 PENDING apžiūra (Tomas)
-        ($1, '102', 1, 2, 1, 140.00, 'Dvivietis', 'AVAILABLE', 'Šviesus kambarys su vaizdu į kiemą', ARRAY['Wi-Fi', 'Baldai', 'Dušas']),
+        ($1, '102', 1, 2, 0, 140.00, 'Dvivietis', 'AVAILABLE', 'Šviesus kambarys su vaizdu į kiemą', ARRAY['Wi-Fi', 'Baldai', 'Dušas']),
         
         -- Kambarys 201: visiškai laisvas, 1 APPROVED apžiūra
-        ($1, '201', 2, 3, 0, 120.00, 'Trivietis', 'RESERVED', 'Erdvus trivietis kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Mikrobangų krosnelė']),
+        ($1, '201', 2, 3, 0, 120.00, 'Trivietis', 'AVAILABLE', 'Erdvus trivietis kambarys', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Mikrobangų krosnelė']),
         
         -- Kambarys 202: visiškai laisvas
         ($1, '202', 2, 2, 0, 150.00, 'Dvivietis', 'AVAILABLE', 'Laisvas kambarys', ARRAY['Wi-Fi', 'Baldai']),
@@ -113,7 +113,8 @@ const seedDatabase = async () => {
     await client.query(`
       INSERT INTO inspections (room_id, student_id, supervisor_id, inspection_date, inspection_time, status, resident_will_attend)
       VALUES 
-        ($1, $2, $3, '2025-02-20', '14:00:00', 'PENDING', NULL)
+        ($1, $2, $3, '2025-12-20', '14:00:00', 'PENDING', NULL),
+        (2, 4, 5, '2025-11-25', '15:00:00', 'APPROVED', NULL)
     `, [roomIds[2], userIds[5], userIds[4]]);
 
     // Atnaujiname student1 kontaktinę informaciją su bendrabučio adresu
