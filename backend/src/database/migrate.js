@@ -13,6 +13,7 @@ const createTables = async () => {
       DROP TABLE IF EXISTS contracts CASCADE;
       DROP TABLE IF EXISTS rooms CASCADE;
       DROP TABLE IF EXISTS dormitories CASCADE;
+      DROP TABLE IF EXISTS requests CASCADE;
       DROP TABLE IF EXISTS contact_information CASCADE;
       DROP TABLE IF EXISTS users CASCADE;
       DROP SEQUENCE IF EXISTS contract_sequence CASCADE;
