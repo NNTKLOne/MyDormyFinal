@@ -26,7 +26,8 @@ export const createUser = async (req, res) => {
       study_program,
       student_id,
       phone,
-      address
+      address,
+      dormitory_id   // <-- PRIDĖTA
     } = req.body;
 
     if (!first_name || !last_name || !email || !user_type) {
@@ -36,10 +37,17 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Check if email already exists in users
+    if ((user_type === "DORMITORY_ADMIN" || user_type === "SUPERVISOR") && !dormitory_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Turite pasirinkti bendrabutį"
+      });
+    }
+
+    // Check if email already exists
     const existingUser = await query(
-      'SELECT id FROM users WHERE email = $1',
-      [email]
+        'SELECT id FROM users WHERE email = $1',
+        [email]
     );
 
     if (existingUser.rows.length > 0) {
@@ -49,51 +57,96 @@ export const createUser = async (req, res) => {
       });
     }
 
-    // Generate temporary password
+    // If creating dormitory admin → check if dormitory already has one
+    if (user_type === "DORMITORY_ADMIN") {
+      const dormCheck = await query(
+          `SELECT admin_id FROM dormitories WHERE id = $1`,
+          [dormitory_id]
+      );
+
+      if (dormCheck.rows[0].admin_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Šiam bendrabučiui jau priskirtas administratorius"
+        });
+      }
+    }
+
+    // If creating supervisor → check if dormitory already has one
+    if (user_type === "SUPERVISOR") {
+      const dormCheck = await query(
+          `SELECT supervisor_id FROM dormitories WHERE id = $1`,
+          [dormitory_id]
+      );
+
+      if (dormCheck.rows[0].supervisor_id) {
+        return res.status(400).json({
+          success: false,
+          message: "Šiam bendrabučiui jau priskirtas budėtojas"
+        });
+      }
+    }
+
     const temporaryPassword = generatePassword();
     const hashedPassword = await bcrypt.hash(temporaryPassword, 10);
 
     const isStudent = user_type === 'STUDENT';
 
-    // Create contact information first
+    // Insert contact info
     const contactResult = await query(
-      `INSERT INTO contact_information (phone, email, address) 
-       VALUES ($1, $2, $3) 
-       RETURNING id`,
-      [phone || null, email, isStudent ? null : (address || null)]
+        `INSERT INTO contact_information (phone, email, address)
+         VALUES ($1, $2, $3)
+         RETURNING id`,
+        [phone || null, email, isStudent ? null : (address || null)]
     );
     const contact_id = contactResult.rows[0].id;
 
-    // Create user with all fields
+    // Insert user
     const result = await query(
-      `INSERT INTO users 
+        `INSERT INTO users
        (first_name, last_name, email, password_hash, user_type, 
-        contact_id, faculty, study_program, student_id, 
-        is_active, must_change_password)
+        contact_id, faculty, study_program, student_id, is_active, must_change_password)
        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, true, true)
-       RETURNING id, first_name, last_name, email, user_type, 
-                 faculty, study_program, student_id, is_active`,
-      [
-        first_name,
-        last_name,
-        email,
-        hashedPassword,
-        user_type,
-        contact_id,
-        faculty || null,
-        study_program || null,
-        student_id || null
-      ]
+       RETURNING id, first_name, last_name, email, user_type`,
+        [
+          first_name,
+          last_name,
+          email,
+          hashedPassword,
+          user_type,
+          contact_id,
+          faculty || null,
+          study_program || null,
+          student_id || null
+        ]
     );
+
+    const newUserId = result.rows[0].id;
+
+    // Assign dormitory admin or supervisor
+    if (user_type === "DORMITORY_ADMIN") {
+      await query(
+          `UPDATE dormitories SET admin_id = $1 WHERE id = $2`,
+          [newUserId, dormitory_id]
+      );
+    }
+
+    if (user_type === "SUPERVISOR") {
+      await query(
+          `UPDATE dormitories SET supervisor_id = $1 WHERE id = $2`,
+          [newUserId, dormitory_id]
+      );
+    }
 
     res.status(201).json({
       success: true,
       message: 'Vartotojas sėkmingai sukurtas',
       data: {
         user: result.rows[0],
-        temporaryPassword: temporaryPassword
+        temporaryPassword
       }
     });
+
   } catch (error) {
     console.error('Create user error:', error);
     res.status(500).json({

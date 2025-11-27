@@ -340,13 +340,12 @@ export const signContract = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if contract belongs to user and is DRAFT
     const contractCheck = await query(
-      `SELECT c.*, r.capacity, r.occupied_beds, r.dormitory_id
-       FROM contracts c 
-       JOIN rooms r ON c.room_id = r.id 
-       WHERE c.id = $1 AND c.student_id = $2`,
-      [id, req.user.id]
+        `SELECT c.*, r.capacity, r.occupied_beds, r.dormitory_id
+         FROM contracts c
+                JOIN rooms r ON c.room_id = r.id
+         WHERE c.id = $1 AND c.student_id = $2`,
+        [id, req.user.id]
     );
 
     if (contractCheck.rows.length === 0) {
@@ -365,19 +364,19 @@ export const signContract = async (req, res) => {
       });
     }
 
-    // Paprastas kapas patikrinimas – ar kambaryje dar yra vietų pagal aktyvias sutartis
+    // Vietų patikrinimas
     const capacityCheck = await query(
-      `SELECT 
-         r.capacity,
-         COALESCE((
-           SELECT COUNT(*) 
-           FROM contracts c2 
-           WHERE c2.room_id = r.id 
-             AND c2.status = 'ACTIVE'
-         ), 0) AS active_residents
-       FROM rooms r
-       WHERE r.id = $1`,
-      [contract.room_id]
+        `SELECT
+           r.capacity,
+           COALESCE((
+                      SELECT COUNT(*)
+                      FROM contracts c2
+                      WHERE c2.room_id = r.id
+                        AND c2.status = 'ACTIVE'
+                    ), 0) AS active_residents
+         FROM rooms r
+         WHERE r.id = $1`,
+        [contract.room_id]
     );
 
     const { capacity, active_residents } = capacityCheck.rows[0];
@@ -390,21 +389,40 @@ export const signContract = async (req, res) => {
       });
     }
 
-    // Studentas pasirašo – statusas SIGNED, dar be vietų skaičiaus keitimo
+    // -------------------------------
+    //   SET END DATE TO YYYY-06-30
+    // -------------------------------
+    const today = new Date();
+    let endYear = today.getFullYear();
+
+    // jei šiandien jau po birželio 30 → baigsis kitais metais
+    const june30 = new Date(endYear, 5, 30); // mėnesiai nuo 0
+
+    if (today > june30) {
+      endYear += 1;
+    }
+
+    const endDate = new Date(endYear, 5, 30);
+
+    // Student signs contract
     await query(
-      `UPDATE contracts 
-       SET status = 'SIGNED', signed_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
-      [id]
+        `UPDATE contracts 
+       SET 
+        status = 'SIGNED',
+        signed_at = CURRENT_TIMESTAMP,
+        end_date = $1
+       WHERE id = $2`,
+        [endDate, id]
     );
 
-    // Prskaičiuoti statusą, bet occupied_beds kol kas nekeis
+    // Recalculate room status
     await recalculateRoomStatus(contract.room_id);
 
     res.json({
       success: true,
       message: 'Sutartis pasirašyta. Laukiama bendrabučio administratoriaus patvirtinimo.'
     });
+
   } catch (error) {
     console.error('Sign contract error:', error);
     res.status(500).json({

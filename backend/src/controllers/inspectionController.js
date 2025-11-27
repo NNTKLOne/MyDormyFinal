@@ -118,13 +118,31 @@ export const createInspection = async (req, res) => {
   }
 };
 
-// @desc    Get inspections for supervisor
+// @desc    Get inspections ONLY for supervisor's dormitory
 // @route   GET /api/inspections/supervisor
 // @access  Private (Supervisor)
 export const getSupervisorInspections = async (req, res) => {
   try {
+    const supervisorId = req.user.id;
+
+    // Find which dormitory this supervisor manages
+    const dormRes = await query(
+        `SELECT id FROM dormitories WHERE supervisor_id = $1`,
+        [supervisorId]
+    );
+
+    if (dormRes.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Jūs nesate priskirtas jokiam bendrabutyje."
+      });
+    }
+
+    const dormitoryId = dormRes.rows[0].id;
+
+    // Get ALL inspections, but only for this dormitory
     const result = await query(
-      `SELECT i.*, 
+        `SELECT i.*, 
               r.room_number, 
               r.capacity,
               r.occupied_beds,
@@ -151,7 +169,9 @@ export const getSupervisorInspections = async (req, res) => {
        JOIN dormitories d ON r.dormitory_id = d.id
        JOIN users u ON i.student_id = u.id
        LEFT JOIN contact_information ci ON u.contact_id = ci.id
+       WHERE r.dormitory_id = $1
        ORDER BY i.inspection_date DESC, i.inspection_time DESC, i.created_at DESC`,
+        [dormitoryId]
     );
 
     res.json({
@@ -159,6 +179,7 @@ export const getSupervisorInspections = async (req, res) => {
       count: result.rows.length,
       data: result.rows
     });
+
   } catch (error) {
     console.error('Get inspections error:', error);
     res.status(500).json({
@@ -263,11 +284,23 @@ export const updateInspectionStatus = async (req, res) => {
         // Sudarome kontrakto numerį CNT-0001 formatu
         const contractNumber = `CNT-${String(seq).padStart(4, '0')}`;
 
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 10);
+          // Sutarties pradžia = šiandien
+          const startDate = new Date();
 
-        await query(
+            // Sutarties pabaiga = YYYY-06-30
+          const today = new Date();
+          let endYear = today.getFullYear();
+
+          const june30 = new Date(endYear, 5, 30); // 5 = birželis
+
+            // Jeigu šiandien jau PO birželio 30 → sutartis baigsis kitais metais
+          if (today > june30) {
+              endYear += 1;
+          }
+
+          const endDate = new Date(endYear, 5, 30);
+
+          await query(
           `INSERT INTO contracts 
           (student_id, room_id, contract_number, start_date, end_date, monthly_price, status)
           VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT')`,

@@ -80,14 +80,13 @@ const createTables = async () => {
         address TEXT NOT NULL,
         contact_id INTEGER REFERENCES contact_information(id) ON DELETE SET NULL,
         admin_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
+        supervisor_id INTEGER REFERENCES users(id) ON DELETE SET NULL,
         total_rooms INTEGER DEFAULT 0,
         available_rooms INTEGER DEFAULT 0,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
-
 
     // Create rooms table
     await client.query(`
@@ -125,7 +124,7 @@ const createTables = async () => {
       CREATE TABLE contracts (
         id SERIAL PRIMARY KEY,
         student_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        room_id INTEGER NOT NULL REFERENCES rooms(id) ON DELETE CASCADE,
+        room_id INTEGER NOT NULL REFERENCES rooms(id),
         contract_number VARCHAR(50) UNIQUE,
         start_date DATE NOT NULL,
         end_date DATE NOT NULL,
