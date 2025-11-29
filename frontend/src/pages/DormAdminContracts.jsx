@@ -15,13 +15,14 @@ import {
   CircularProgress,
   Alert
 } from '@mui/material';
-import axios from 'axios';
+import axios from '../api/axios';
 
 const getStatusChip = (status) => {
   const map = {
     DRAFT: { label: 'Laukiama pasirašymo', color: 'default' },
     SIGNED: { label: 'Laukiama admino patvirtinimo', color: 'info' },
     ACTIVE: { label: 'Aktyvi', color: 'success' },
+    REJECTED: {label: 'Atmesta', color: 'default'},
     EXPIRED: { label: 'Pasibaigusi', color: 'default' },
     TERMINATED: { label: 'Nutraukta', color: 'error' }
   };

@@ -1,22 +1,27 @@
 import { query } from "../config/database.js";
 import { recalculateRoomStatus } from "./roomController.js";
+import { sendNotification } from "../services/notificationService.js";
 
+/* ============================================================
+   GET ALL CONTRACTS (ACTIVE / TERMINATED / EXPIRED)
+============================================================ */
 export const getAllContracts = async (req, res) => {
     try {
         const result = await query(`
-      SELECT 
-        c.*,
-        u.first_name,
-        u.last_name,
-        u.email,
-        r.room_number,
-        d.name AS dormitory_name
-      FROM contracts c
-      JOIN users u ON u.id = c.student_id
-      JOIN rooms r ON r.id = c.room_id
-      JOIN dormitories d ON d.id = r.dormitory_id
-      ORDER BY c.created_at DESC
-    `);
+            SELECT
+                c.*,
+                r.room_number,
+                d.name AS dormitory_name,
+                u.first_name,
+                u.last_name,
+                u.email
+            FROM contracts c
+            JOIN rooms r ON c.room_id = r.id
+            JOIN dormitories d ON r.dormitory_id = d.id
+            JOIN users u ON c.student_id = u.id
+            WHERE c.status IN ('ACTIVE', 'TERMINATED', 'EXPIRED')
+            ORDER BY c.created_at DESC
+        `);
 
         res.json({ success: true, data: result.rows });
     } catch (err) {
@@ -25,12 +30,22 @@ export const getAllContracts = async (req, res) => {
     }
 };
 
+/* ============================================================
+   TERMINATE CONTRACT + SEND NOTIFICATION
+============================================================ */
 export const terminateContract = async (req, res) => {
     try {
         const { id } = req.params;
 
         const contractRes = await query(
-            `SELECT * FROM contracts WHERE id = $1`,
+            `SELECT 
+                c.*, 
+                r.room_number,
+                d.name AS dormitory_name
+             FROM contracts c
+             JOIN rooms r ON c.room_id = r.id
+             JOIN dormitories d ON r.dormitory_id = d.id
+             WHERE c.id = $1`,
             [id]
         );
 
@@ -40,20 +55,28 @@ export const terminateContract = async (req, res) => {
         const contract = contractRes.rows[0];
 
         if (contract.status === "TERMINATED")
-            return res.status(400).json({ success: false, message: "Sutartis jau likviduota" });
+            return res.status(400).json({ success: false, message: "Sutartis jau nutraukta" });
 
+        // MARK AS TERMINATED
         await query(
             `UPDATE contracts
-       SET status = 'TERMINATED',
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $1`,
+                SET status = 'TERMINATED',
+                    updated_at = CURRENT_TIMESTAMP
+             WHERE id = $1`,
             [id]
         );
 
-        // Perskaičiuoti kambario statusą
+        // Recalculate room
         await recalculateRoomStatus(contract.room_id);
 
-        res.json({ success: true, message: "Sutartis likviduota" });
+        // 🔔 SEND NOTIFICATION TO STUDENT
+        await sendNotification(
+            contract.student_id,
+            "Sutartis nutraukta",
+            `Jūsų sutartis dėl kambario ${contract.room_number} bendrabutyje „${contract.dormitory_name}“ buvo nutraukta.`
+        );
+
+        res.json({ success: true, message: "Sutartis nutraukta" });
 
     } catch (err) {
         console.error("Terminate contract error:", err);
@@ -61,6 +84,9 @@ export const terminateContract = async (req, res) => {
     }
 };
 
+/* ============================================================
+   EXTEND CONTRACT + SEND NOTIFICATION
+============================================================ */
 export const extendContract = async (req, res) => {
     try {
         const { id } = req.params;
@@ -70,7 +96,14 @@ export const extendContract = async (req, res) => {
             return res.status(400).json({ success: false, message: "Nenurodyta nauja pabaigos data" });
 
         const contractRes = await query(
-            `SELECT * FROM contracts WHERE id = $1`,
+            `SELECT
+                 c.*,
+                 r.room_number,
+                 d.name AS dormitory_name
+             FROM contracts c
+                      JOIN rooms r ON c.room_id = r.id
+                      JOIN dormitories d ON r.dormitory_id = d.id
+             WHERE c.id = $1`,
             [id]
         );
 
@@ -85,15 +118,23 @@ export const extendContract = async (req, res) => {
         if (newEnd <= currentEnd)
             return res.status(400).json({
                 success: false,
-                message: "Galima tik pratęsti – pabaigos data turi būti vėlesnė nei dabartinė"
+                message: "Galima tik pratęsti – nauja pabaigos data turi būti vėlesnė už dabartinę"
             });
 
+        // UPDATE CONTRACT DATE
         await query(
             `UPDATE contracts
-        SET end_date = $1,
-            updated_at = CURRENT_TIMESTAMP
-        WHERE id = $2`,
+             SET end_date = $1,
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $2`,
             [new_end_date, id]
+        );
+
+        // 🔔 SEND NOTIFICATION
+        await sendNotification(
+            contract.student_id,
+            "Sutartis pratęsta",
+            `Jūsų sutartis dėl kambario ${contract.room_number} bendrabutyje „${contract.dormitory_name}“ buvo pratęsta iki ${new_end_date}.`
         );
 
         res.json({ success: true, message: "Sutartis pratęsta" });

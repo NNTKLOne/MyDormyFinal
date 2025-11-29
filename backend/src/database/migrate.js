@@ -2,7 +2,7 @@ import pool from '../config/database.js';
 
 const createTables = async () => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -16,12 +16,15 @@ const createTables = async () => {
       DROP TABLE IF EXISTS requests CASCADE;
       DROP TABLE IF EXISTS contact_information CASCADE;
       DROP TABLE IF EXISTS users CASCADE;
+
       DROP SEQUENCE IF EXISTS contract_sequence CASCADE;
+
       DROP TYPE IF EXISTS user_type CASCADE;
-      DROP TYPE IF EXISTS notification_status CASCADE;
+      DROP TYPE IF EXISTS notification_status CASCADE; -- nereikalingas, bet IF EXISTS netrukdo
       DROP TYPE IF EXISTS inspection_status CASCADE;
       DROP TYPE IF EXISTS room_status CASCADE;
       DROP TYPE IF EXISTS contract_status CASCADE;
+      DROP TYPE IF EXISTS notification_type CASCADE; -- 💡 SVARBU: numetam notification_type
     `);
 
     // Create ENUM types
@@ -29,7 +32,8 @@ const createTables = async () => {
       CREATE TYPE user_type AS ENUM ('STUDENT', 'UNIVERSITY_ADMIN', 'DORMITORY_ADMIN', 'SUPERVISOR', 'RESIDENT');
       CREATE TYPE inspection_status AS ENUM ('PENDING', 'APPROVED', 'REJECTED', 'CANCELED', 'COMPLETED');
       CREATE TYPE room_status AS ENUM ('AVAILABLE', 'RESERVED', 'OCCUPIED');
-      CREATE TYPE contract_status AS ENUM ('DRAFT', 'SIGNED', 'ACTIVE', 'EXPIRED', 'TERMINATED');
+      CREATE TYPE contract_status AS ENUM ('DRAFT', 'SIGNED', 'REJECTED', 'ACTIVE', 'EXPIRED', 'TERMINATED');
+      CREATE TYPE notification_type AS ENUM ('INSPECTION', 'CONTRACT', 'SYSTEM');
     `);
 
     // Create contact_information table
@@ -155,6 +159,18 @@ const createTables = async () => {
       );
     `);
 
+    // Create notifications table
+    await client.query(`
+      CREATE TABLE notifications (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        title VARCHAR(255) NOT NULL,
+        message TEXT,
+        is_read BOOLEAN DEFAULT FALSE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     // Create indexes for better performance
     await client.query(`
       CREATE INDEX idx_users_email ON users(email);
@@ -179,8 +195,16 @@ const createTables = async () => {
       $$ language 'plpgsql';
     `);
 
-    // Apply updated_at trigger to all tables
-    const tables = ['users', 'contact_information', 'dormitories', 'rooms', 'contracts', 'inspections'];
+    // Apply updated_at trigger to all tables that have updated_at
+    const tables = [
+      'users',
+      'contact_information',
+      'dormitories',
+      'rooms',
+      'contracts',
+      'inspections'
+    ];
+
     for (const table of tables) {
       await client.query(`
         CREATE TRIGGER update_${table}_updated_at
@@ -203,11 +227,11 @@ const createTables = async () => {
 
 // Run migration
 createTables()
-  .then(() => {
-    console.log('Migration completed successfully');
-    process.exit(0);
-  })
-  .catch((error) => {
-    console.error('Migration failed:', error);
-    process.exit(1);
-  });
+    .then(() => {
+      console.log('Migration completed successfully');
+      process.exit(0);
+    })
+    .catch((error) => {
+      console.error('Migration failed:', error);
+      process.exit(1);
+    });

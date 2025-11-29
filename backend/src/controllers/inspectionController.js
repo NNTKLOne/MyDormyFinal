@@ -1,5 +1,6 @@
 import { query } from '../config/database.js';
 import { recalculateRoomStatus } from './roomController.js';
+import { sendNotification } from "../services/notificationService.js";
 
 // @desc    Create inspection appointment (Student books inspection)
 // @route   POST /api/inspections
@@ -315,6 +316,25 @@ export const updateInspectionStatus = async (req, res) => {
         );
       }
     }
+
+    // 🔔 SIUNČIAME STUDENTUI NOTIFIKACIJĄ
+    let notifTitle = "";
+    let notifMessage = "";
+
+    if (status === "APPROVED") {
+      notifTitle = "Apžiūra patvirtinta";
+      notifMessage = "Jūsų kambario apžiūros užklausa buvo patvirtinta budėtojo.";
+    }
+    else if (status === "REJECTED") {
+      notifTitle = "Apžiūra atmesta";
+      notifMessage = "Jūsų kambario apžiūros užklausa buvo atmesta.";
+    }
+    else if (status === "CANCELED") {
+      notifTitle = "Apžiūra atšaukta";
+      notifMessage = "Jūsų apžiūros užklausa buvo atšaukta.";
+    }
+
+    await sendNotification(inspection.student_id, notifTitle, notifMessage);
 
     // Po pakeitimo perskaičiuojam kambario statusą
     await recalculateRoomStatus(inspection.room_id);
