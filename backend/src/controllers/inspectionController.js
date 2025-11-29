@@ -238,18 +238,56 @@ export const updateInspectionStatus = async (req, res) => {
           message: 'Studentas gali tik atšaukti savo apžiūrą'
         });
       }
+
       if (inspection.student_id !== req.user.id) {
         return res.status(403).json({
           success: false,
           message: 'Negalite keisti kito studento apžiūros'
         });
       }
-    } else if (!isSupervisor) {
-      return res.status(403).json({
-        success: false,
-        message: 'Neturite teisės keisti apžiūros būsenos'
+
+      // Patikrinam ar studentas turi sutartį su šiuo kambariu
+      const contractRes = await query(
+          `SELECT * FROM contracts
+     WHERE student_id = $1 AND room_id = $2
+     ORDER BY created_at DESC LIMIT 1`,
+          [inspection.student_id, inspection.room_id]
+      );
+
+      if (contractRes.rows.length > 0) {
+        const contract = contractRes.rows[0];
+
+        if (contract.status === 'SIGNED') {
+          return res.status(400).json({
+            success: false,
+            message: 'Negalite atšaukti apžiūros, nes sutartis jau pasirašyta.'
+          });
+        }
+
+        if (contract.status === 'DRAFT') {
+          await query(
+              `DELETE FROM contracts WHERE id = $1`,
+              [contract.id]
+          );
+        }
+      }
+
+      // Atnaujinam apžiūrą į CANCELED
+      await query(
+          'UPDATE inspections SET status = $1 WHERE id = $2',
+          [status, id]
+      );
+
+      await recalculateRoomStatus(inspection.room_id);
+
+      const statusText = 'atšaukta';
+
+      return res.json({
+        success: true,
+        message: `Apžiūra ${statusText}`
       });
     }
+
 
     // Update inspection status
     if (isSupervisor) {
