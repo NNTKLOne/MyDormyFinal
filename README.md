@@ -64,8 +64,11 @@ npm run dev
 ### Sprint 2: Administravimas
 - Sutarčių valdymas
 - Sutarčių pasirašymas
+- Sutarčių prašymo pateikimas
 - Sutarčių peržiūra ir tvirtinimas
+
 
 ### Sprint 3: 
 - Kambarių informacijos valdymas
 - Buvimo kambaryje būsenos valdymas
+- Pranešimų gavimas
