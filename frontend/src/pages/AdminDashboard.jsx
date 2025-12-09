@@ -149,9 +149,9 @@ function AdminDashboard() {
         last_name: userDialog.last_name,
         email: userDialog.email,
         user_type: userDialog.user_type,
-        faculty: userDialog.faculty || null,
-        study_program: userDialog.study_program || null,
-        student_id: userDialog.student_id || null,
+        faculty: isStudent ? userDialog.faculty : null,
+        study_program: isStudent ? userDialog.study_program : null,
+        student_id: isStudent ? userDialog.student_id : null,
         phone: userDialog.phone || null,
         address: isStudent ? null : userDialog.address || null,
         dormitory_id: userDialog.dormitory_id || null
@@ -633,7 +633,16 @@ function AdminDashboard() {
                       <Button
                           onClick={handleCreateUser}
                           variant="contained"
-                          disabled={!userDialog.first_name || !userDialog.last_name || !userDialog.email}
+                          disabled={
+                              !userDialog.first_name ||
+                              !userDialog.last_name ||
+                              !userDialog.email ||
+                              (userDialog.user_type === "STUDENT" && (
+                                  !userDialog.faculty ||
+                                  !userDialog.study_program ||
+                                  !userDialog.student_id
+                              ))
+                          }
                       >
                         Sukurti
                       </Button>
@@ -641,7 +650,16 @@ function AdminDashboard() {
                       <Button
                           onClick={handleUpdateUser}
                           variant="contained"
-                          disabled={!userDialog.first_name || !userDialog.last_name || !userDialog.email}
+                          disabled={
+                              !userDialog.first_name ||
+                              !userDialog.last_name ||
+                              !userDialog.email ||
+                              (userDialog.user_type === "STUDENT" && (
+                                  !userDialog.faculty ||
+                                  !userDialog.study_program ||
+                                  !userDialog.student_id
+                              ))
+                          }
                       >
                         Atnaujinti
                       </Button>

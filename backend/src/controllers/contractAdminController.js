@@ -93,9 +93,12 @@ export const extendContract = async (req, res) => {
         const { new_end_date } = req.body;
 
         if (!new_end_date)
-            return res.status(400).json({ success: false, message: "Nenurodyta nauja pabaigos data" });
+            return res.status(400).json({
+                success: false,
+                message: "Nenurodyta nauja pabaigos data"
+            });
 
-        const contractRes = await query(
+        const result = await query(
             `SELECT
                  c.*,
                  r.room_number,
@@ -107,40 +110,49 @@ export const extendContract = async (req, res) => {
             [id]
         );
 
-        if (contractRes.rows.length === 0)
-            return res.status(404).json({ success: false, message: "Sutartis nerasta" });
-
-        const contract = contractRes.rows[0];
-
-        const currentEnd = new Date(contract.end_date);
-        const newEnd = new Date(new_end_date);
-
-        if (newEnd <= currentEnd)
-            return res.status(400).json({
+        if (result.rows.length === 0)
+            return res.status(404).json({
                 success: false,
-                message: "Galima tik pratęsti – nauja pabaigos data turi būti vėlesnė už dabartinę"
+                message: "Sutartis nerasta"
             });
 
-        // UPDATE CONTRACT DATE
+        const contract = result.rows[0];
+
+        // Paverčiame tik į YYYY-MM-DD formą
+        const currentEnd = String(contract.end_date).split("T")[0];
+        const newEnd = String(new_end_date).split("T")[0];
+
+        // Lyginame tiesiogiai stringus — tai SAUGIAUSIAS būdas
+        if (newEnd <= currentEnd) {
+            return res.status(400).json({
+                success: false,
+                message: `Nauja pabaigos data turi būti vėlesnė už dabartinę`
+            });
+        }
+
+        // Atnaujinimas
         await query(
             `UPDATE contracts
              SET end_date = $1,
                  updated_at = CURRENT_TIMESTAMP
              WHERE id = $2`,
-            [new_end_date, id]
+            [newEnd, id]
         );
 
-        // 🔔 SEND NOTIFICATION
+        // Notifikacija studentui
         await sendNotification(
             contract.student_id,
             "Sutartis pratęsta",
-            `Jūsų sutartis dėl kambario ${contract.room_number} bendrabutyje „${contract.dormitory_name}“ buvo pratęsta iki ${new_end_date}.`
+            `Jūsų sutartis dėl kambario ${contract.room_number} buvo pratęsta iki ${newEnd}.`
         );
 
         res.json({ success: true, message: "Sutartis pratęsta" });
 
     } catch (err) {
         console.error("Extend contract error:", err);
-        res.status(500).json({ success: false, message: "Serverio klaida" });
+        res.status(500).json({
+            success: false,
+            message: "Serverio klaida"
+        });
     }
 };

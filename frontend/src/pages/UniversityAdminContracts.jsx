@@ -30,7 +30,8 @@ function UniversityAdminContracts() {
     const [extendDialog, setExtendDialog] = useState({
         open: false,
         id: null,
-        newDate: ""
+        newDate: "",
+        minDate: ""
     });
 
     useEffect(() => {
@@ -61,14 +62,24 @@ function UniversityAdminContracts() {
     };
 
     const openExtend = (contract) => {
-        const dateISO = new Date(contract.end_date).toISOString().split("T")[0];
+        // GAUNAM realią datą (iš DB gali būti su timezone)
+        const d = new Date(contract.end_date);
+
+        // Konvertuojam į YYYY-MM-DD lokaliu laiku
+        const year = d.getFullYear();
+        const month = String(d.getMonth() + 1).padStart(2, "0");
+        const day = String(d.getDate()).padStart(2, "0");
+
+        const localISO = `${year}-${month}-${day}`;
 
         setExtendDialog({
             open: true,
             id: contract.id,
-            newDate: dateISO
+            newDate: localISO,
+            minDate: localISO   // LEIDŽIAMA TIK NAUJA DATA > minDate
         });
     };
+
 
     const extend = async () => {
         try {
@@ -77,7 +88,7 @@ function UniversityAdminContracts() {
             });
 
             setMessage({ text: "Sutartis sėkmingai pratęsta", severity: "success" });
-            setExtendDialog({ open: false, id: null, newDate: "" });
+            setExtendDialog({ open: false, id: null, newDate: "", minDate: "" });
             loadContracts();
 
         } catch (err) {
@@ -110,18 +121,10 @@ function UniversityAdminContracts() {
             })
             .filter((c) => (filterDorm === "ALL" ? true : c.dormitory_name === filterDorm))
             .filter((c) => (filterStatus === "ALL" ? true : c.status === filterStatus))
-            .filter((c) =>
-                startFrom ? new Date(c.start_date) >= new Date(startFrom) : true
-            )
-            .filter((c) =>
-                startTo ? new Date(c.start_date) <= new Date(startTo) : true
-            )
-            .filter((c) =>
-                endFrom ? new Date(c.end_date) >= new Date(endFrom) : true
-            )
-            .filter((c) =>
-                endTo ? new Date(c.end_date) <= new Date(endTo) : true
-            );
+            .filter((c) => startFrom ? new Date(c.start_date) >= new Date(startFrom) : true)
+            .filter((c) => startTo ? new Date(c.start_date) <= new Date(startTo) : true)
+            .filter((c) => endFrom ? new Date(c.end_date) >= new Date(endFrom) : true)
+            .filter((c) => endTo ? new Date(c.end_date) <= new Date(endTo) : true);
     }, [contracts, search, filterDorm, filterStatus, startFrom, startTo, endFrom, endTo]);
 
     const dorms = [...new Set(contracts.map(c => c.dormitory_name))];
@@ -178,37 +181,13 @@ function UniversityAdminContracts() {
                     <MenuItem value="TERMINATED">Nutraukta</MenuItem>
                 </TextField>
 
-                <TextField
-                    type="date"
-                    label="Pradžia nuo"
-                    InputLabelProps={{ shrink: true }}
-                    value={startFrom}
-                    onChange={(e) => setStartFrom(e.target.value)}
-                />
+                <TextField type="date" label="Pradžia nuo" InputLabelProps={{ shrink: true }} value={startFrom} onChange={(e) => setStartFrom(e.target.value)} />
 
-                <TextField
-                    type="date"
-                    label="Pradžia iki"
-                    InputLabelProps={{ shrink: true }}
-                    value={startTo}
-                    onChange={(e) => setStartTo(e.target.value)}
-                />
+                <TextField type="date" label="Pradžia iki" InputLabelProps={{ shrink: true }} value={startTo} onChange={(e) => setStartTo(e.target.value)} />
 
-                <TextField
-                    type="date"
-                    label="Pabaiga nuo"
-                    InputLabelProps={{ shrink: true }}
-                    value={endFrom}
-                    onChange={(e) => setEndFrom(e.target.value)}
-                />
+                <TextField type="date" label="Pabaiga nuo" InputLabelProps={{ shrink: true }} value={endFrom} onChange={(e) => setEndFrom(e.target.value)} />
 
-                <TextField
-                    type="date"
-                    label="Pabaiga iki"
-                    InputLabelProps={{ shrink: true }}
-                    value={endTo}
-                    onChange={(e) => setEndTo(e.target.value)}
-                />
+                <TextField type="date" label="Pabaiga iki" InputLabelProps={{ shrink: true }} value={endTo} onChange={(e) => setEndTo(e.target.value)} />
             </Box>
 
             {/* ---------------- TABLE ---------------- */}
@@ -251,23 +230,14 @@ function UniversityAdminContracts() {
 
                                     <TableCell>{getStatusChip(c.status)}</TableCell>
 
-                                    {/* Veiksmai */}
                                     <TableCell>
                                         {c.status !== "TERMINATED" && c.status !== "EXPIRED" ? (
                                             <Box sx={{ display: "flex", gap: 1 }}>
-                                                <Button
-                                                    color="error"
-                                                    size="small"
-                                                    onClick={() => terminate(c.id)}
-                                                >
+                                                <Button color="error" size="small" onClick={() => terminate(c.id)}>
                                                     Likviduoti
                                                 </Button>
 
-                                                <Button
-                                                    color="primary"
-                                                    size="small"
-                                                    onClick={() => openExtend(c)}
-                                                >
+                                                <Button color="primary" size="small" onClick={() => openExtend(c)}>
                                                     Pratęsti
                                                 </Button>
                                             </Box>
@@ -290,8 +260,32 @@ function UniversityAdminContracts() {
                         type="date"
                         fullWidth
                         value={extendDialog.newDate}
-                        onChange={(e) => setExtendDialog({ ...extendDialog, newDate: e.target.value })}
+                        onChange={(e) => {
+                            const selected = new Date(e.target.value);
+                            const min = new Date(extendDialog.minDate);
+
+                            if (selected.getTime() <= min.getTime()) {
+                                setMessage({
+                                    text: "Nauja pabaigos data turi būti vėlesnė už dabartinę pabaigos datą.",
+                                    severity: "error"
+                                });
+                                return;
+                            }
+
+                            setExtendDialog({ ...extendDialog, newDate: e.target.value });
+                        }}
+                        inputProps={{
+                            min: extendDialog.minDate
+                                ? (() => {
+                                    // minDate +1 diena
+                                    const d = new Date(extendDialog.minDate);
+                                    d.setDate(d.getDate() + 1);
+                                    return d.toISOString().split("T")[0];
+                                })()
+                                : undefined
+                        }}
                     />
+
                 </DialogContent>
 
                 <DialogActions>

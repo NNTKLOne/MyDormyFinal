@@ -277,7 +277,7 @@ function StudentDashboard() {
                         </CardContent></Card>
                     ) : (
                         <Alert severity="info">
-                          Jūs dar negyvena bendrabutyje.
+                          Jūs dar negyvenate bendrabutyje.
                         </Alert>
                     )}
                   </>
