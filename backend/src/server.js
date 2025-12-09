@@ -9,6 +9,9 @@ import roomRoutes from './routes/roomRoutes.js';
 import inspectionRoutes from './routes/inspectionRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import contractRoutes from './routes/contractRoutes.js';
+import dormitoryRoutes from './routes/dormitoryRoutes.js';
+import contractAdminRoutes from './routes/contractAdminRoutes.js';
+import notificationsRoutes from "./routes/notificationRoutes.js";
 
 dotenv.config();
 
@@ -40,6 +43,9 @@ app.use('/api/rooms', roomRoutes);
 app.use('/api/inspections', inspectionRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/contracts', contractRoutes);
+app.use('/api/dormitories', dormitoryRoutes);
+app.use('/api/uadmin', contractAdminRoutes);
+app.use("/api/notifications", notificationsRoutes);
 
 // 404 handler
 app.use((req, res) => {

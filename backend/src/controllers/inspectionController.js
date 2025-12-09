@@ -1,5 +1,6 @@
 import { query } from '../config/database.js';
 import { recalculateRoomStatus } from './roomController.js';
+import { sendNotification } from "../services/notificationService.js";
 
 // @desc    Create inspection appointment (Student books inspection)
 // @route   POST /api/inspections
@@ -118,13 +119,31 @@ export const createInspection = async (req, res) => {
   }
 };
 
-// @desc    Get inspections for supervisor
+// @desc    Get inspections ONLY for supervisor's dormitory
 // @route   GET /api/inspections/supervisor
 // @access  Private (Supervisor)
 export const getSupervisorInspections = async (req, res) => {
   try {
+    const supervisorId = req.user.id;
+
+    // Find which dormitory this supervisor manages
+    const dormRes = await query(
+        `SELECT id FROM dormitories WHERE supervisor_id = $1`,
+        [supervisorId]
+    );
+
+    if (dormRes.rows.length === 0) {
+      return res.status(403).json({
+        success: false,
+        message: "Jūs nesate priskirtas jokiam bendrabutyje."
+      });
+    }
+
+    const dormitoryId = dormRes.rows[0].id;
+
+    // Get ALL inspections, but only for this dormitory
     const result = await query(
-      `SELECT i.*, 
+        `SELECT i.*, 
               r.room_number, 
               r.capacity,
               r.occupied_beds,
@@ -151,7 +170,9 @@ export const getSupervisorInspections = async (req, res) => {
        JOIN dormitories d ON r.dormitory_id = d.id
        JOIN users u ON i.student_id = u.id
        LEFT JOIN contact_information ci ON u.contact_id = ci.id
+       WHERE r.dormitory_id = $1
        ORDER BY i.inspection_date DESC, i.inspection_time DESC, i.created_at DESC`,
+        [dormitoryId]
     );
 
     res.json({
@@ -159,6 +180,7 @@ export const getSupervisorInspections = async (req, res) => {
       count: result.rows.length,
       data: result.rows
     });
+
   } catch (error) {
     console.error('Get inspections error:', error);
     res.status(500).json({
@@ -216,18 +238,56 @@ export const updateInspectionStatus = async (req, res) => {
           message: 'Studentas gali tik atšaukti savo apžiūrą'
         });
       }
+
       if (inspection.student_id !== req.user.id) {
         return res.status(403).json({
           success: false,
           message: 'Negalite keisti kito studento apžiūros'
         });
       }
-    } else if (!isSupervisor) {
-      return res.status(403).json({
-        success: false,
-        message: 'Neturite teisės keisti apžiūros būsenos'
+
+      // Patikrinam ar studentas turi sutartį su šiuo kambariu
+      const contractRes = await query(
+          `SELECT * FROM contracts
+     WHERE student_id = $1 AND room_id = $2
+     ORDER BY created_at DESC LIMIT 1`,
+          [inspection.student_id, inspection.room_id]
+      );
+
+      if (contractRes.rows.length > 0) {
+        const contract = contractRes.rows[0];
+
+        if (contract.status === 'SIGNED') {
+          return res.status(400).json({
+            success: false,
+            message: 'Negalite atšaukti apžiūros, nes sutartis jau pasirašyta.'
+          });
+        }
+
+        if (contract.status === 'DRAFT') {
+          await query(
+              `DELETE FROM contracts WHERE id = $1`,
+              [contract.id]
+          );
+        }
+      }
+
+      // Atnaujinam apžiūrą į CANCELED
+      await query(
+          'UPDATE inspections SET status = $1 WHERE id = $2',
+          [status, id]
+      );
+
+      await recalculateRoomStatus(inspection.room_id);
+
+      const statusText = 'atšaukta';
+
+      return res.json({
+        success: true,
+        message: `Apžiūra ${statusText}`
       });
     }
+
 
     // Update inspection status
     if (isSupervisor) {
@@ -263,11 +323,23 @@ export const updateInspectionStatus = async (req, res) => {
         // Sudarome kontrakto numerį CNT-0001 formatu
         const contractNumber = `CNT-${String(seq).padStart(4, '0')}`;
 
-        const startDate = new Date();
-        const endDate = new Date();
-        endDate.setMonth(endDate.getMonth() + 10);
+          // Sutarties pradžia = šiandien
+          const startDate = new Date();
 
-        await query(
+            // Sutarties pabaiga = YYYY-06-30
+          const today = new Date();
+          let endYear = today.getFullYear();
+
+          const june30 = new Date(endYear, 5, 30); // 5 = birželis
+
+            // Jeigu šiandien jau PO birželio 30 → sutartis baigsis kitais metais
+          if (today > june30) {
+              endYear += 1;
+          }
+
+          const endDate = new Date(endYear, 5, 30);
+
+          await query(
           `INSERT INTO contracts 
           (student_id, room_id, contract_number, start_date, end_date, monthly_price, status)
           VALUES ($1, $2, $3, $4, $5, $6, 'DRAFT')`,
@@ -282,6 +354,25 @@ export const updateInspectionStatus = async (req, res) => {
         );
       }
     }
+
+    // 🔔 SIUNČIAME STUDENTUI NOTIFIKACIJĄ
+    let notifTitle = "";
+    let notifMessage = "";
+
+    if (status === "APPROVED") {
+      notifTitle = "Apžiūra patvirtinta";
+      notifMessage = "Jūsų kambario apžiūros užklausa buvo patvirtinta budėtojo.";
+    }
+    else if (status === "REJECTED") {
+      notifTitle = "Apžiūra atmesta";
+      notifMessage = "Jūsų kambario apžiūros užklausa buvo atmesta.";
+    }
+    else if (status === "CANCELED") {
+      notifTitle = "Apžiūra atšaukta";
+      notifMessage = "Jūsų apžiūros užklausa buvo atšaukta.";
+    }
+
+    await sendNotification(inspection.student_id, notifTitle, notifMessage);
 
     // Po pakeitimo perskaičiuojam kambario statusą
     await recalculateRoomStatus(inspection.room_id);

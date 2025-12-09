@@ -3,7 +3,7 @@ import bcrypt from 'bcrypt';
 
 const seedDatabase = async () => {
   const client = await pool.connect();
-  
+
   try {
     await client.query('BEGIN');
 
@@ -42,13 +42,13 @@ const seedDatabase = async () => {
 
     // Insert dormitories
     const dormResult = await client.query(`
-      INSERT INTO dormitories (name, address, contact_id, admin_id, total_rooms, available_rooms)
+      INSERT INTO dormitories (name, address, contact_id, admin_id, supervisor_id, total_rooms, available_rooms)
       VALUES 
-        ('VGTU Bendrabutis Nr. 1', 'Saulėtekio al. 39, Vilnius', $1, $2, 8, 5),
-        ('VGTU Bendrabutis Nr. 2', 'Saulėtekio al. 41, Vilnius', $1, $2, 0, 0),
-        ('VGTU Bendrabutis Nr. 3', 'Saulėtekio al. 60, Vilnius', $1, $2, 0, 0)
+        ('VGTU Bendrabutis Nr. 1', 'Saulėtekio al. 39, Vilnius', $1, $2, $3, 8, 5),
+        ('VGTU Bendrabutis Nr. 2', 'Saulėtekio al. 41, Vilnius', null, null, null, 0, 0),
+        ('VGTU Bendrabutis Nr. 3', 'Saulėtekio al. 60, Vilnius', null, null, null, 0, 0)
       RETURNING id;
-    `, [contactIds[1], userIds[1]]);
+    `, [contactIds[1], userIds[1], userIds[4]]);
 
     const dormIds = dormResult.rows.map(row => row.id);
 
@@ -79,9 +79,18 @@ const seedDatabase = async () => {
         ($1, '401', 4, 2, 0, 160.00, 'Dvivietis', 'AVAILABLE', 'Kambarys ketvirtame aukšte', ARRAY['Wi-Fi', 'Baldai']),
         
         -- Kambarys 501: visiškai laisvas
-        ($1, '501', 5, 2, 0, 170.00, 'Dvivietis', 'AVAILABLE', 'Premium kambarys aukštame aukšte', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius', 'Balkonas'])
+        ($1, '501', 5, 2, 0, 170.00, 'Dvivietis', 'AVAILABLE', 'Premium kambarys aukštame aukšte', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius', 'Balkonas']),
+
+      -- Kambarys 302: visiškai laisvas
+      ($2, '302', 3, 3, 0, 130.00, 'Trivietis', 'AVAILABLE', 'Didelis kambarys su puikiu vaizdu', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas']),
+
+      -- Kambarys 401: visiškai laisvas
+      ($2, '401', 4, 2, 0, 160.00, 'Dvivietis', 'AVAILABLE', 'Kambarys ketvirtame aukšte', ARRAY['Wi-Fi', 'Baldai']),
+
+      -- Kambarys 501: visiškai laisvas
+      ($2, '501', 5, 2, 0, 170.00, 'Dvivietis', 'AVAILABLE', 'Premium kambarys aukštame aukšte', ARRAY['Wi-Fi', 'Baldai', 'Šaldytuvas', 'Kondicionierius', 'Balkonas'])
       RETURNING id;
-    `, [dormIds[0]]);
+    `, [dormIds[0], dormIds[1]]);
 
     const roomIds = roomResult.rows.map(row => row.id);
 
@@ -133,7 +142,7 @@ const seedDatabase = async () => {
 
     await client.query('COMMIT');
     console.log('Database seeded successfully!');
-   
+
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error seeding database:', error);
