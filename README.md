@@ -51,6 +51,9 @@ npm install
 npm run dev
 ```
 
+## Paleidimas
+- Nueikite į [http://localhost:3001](http://localhost:3001)
+
 ## Funkcionalumas
 
 ### Sprint 1: Pagrindinis funkcionalumas
